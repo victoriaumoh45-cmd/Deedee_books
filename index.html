@@ -1,0 +1,822 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>Shelf — Reading Tracker</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/epubjs/0.3.93/epub.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<style>
+  :root{
+    --bg:#FFFFFF;
+    --bg-2:#F2F2F7;
+    --text:#1C1C1E;
+    --text-2:#8E8E93;
+    --accent:#FF5B39;
+    --accent-2:#FFB400;
+    --line:#E5E5EA;
+    --card:#FFFFFF;
+    --danger:#FF3B30;
+    --green:#34C759;
+    --shadow:0 8px 20px rgba(0,0,0,0.08);
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg-2); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Inter,Roboto,system-ui,sans-serif;
+    overscroll-behavior-y:none;
+  }
+  button{font-family:inherit;}
+  #app{max-width:640px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative; background:var(--bg-2);}
+
+  .header{ padding:8px 20px 4px; background:var(--bg-2); position:sticky; top:0; z-index:10; }
+  .header .eyebrow{font-size:13px; color:var(--accent); font-weight:600; display:flex; align-items:center; justify-content:space-between;}
+  .header h1{font-size:34px; font-weight:800; margin:0; letter-spacing:-0.02em;}
+  .add-btn{
+    width:32px; height:32px; border-radius:50%; border:none; background:var(--accent); color:#fff;
+    font-size:19px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+  }
+  .add-btn:active{transform:scale(0.92);}
+
+  .view{flex:1; padding:0 0 100px; display:none;}
+  .view.active{display:block;}
+
+  .section-title{font-size:20px; font-weight:800; padding:18px 20px 8px; letter-spacing:-0.01em;}
+  .carousel{display:flex; gap:14px; overflow-x:auto; padding:4px 20px 10px; scrollbar-width:none;}
+  .carousel::-webkit-scrollbar{display:none;}
+  .carousel-card{flex:0 0 128px; cursor:pointer;}
+  .carousel .cover{width:128px; height:192px;}
+  .carousel-title{font-size:13px; font-weight:700; margin-top:8px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .carousel-sub{font-size:12px; color:var(--text-2); margin-top:2px;}
+  .mini-progress{height:3px; border-radius:2px; background:var(--line); margin-top:6px; width:128px; overflow:hidden;}
+  .mini-progress>div{height:100%; background:var(--accent);}
+
+  .shelf-tabs{display:flex; gap:8px; overflow-x:auto; padding:6px 20px 12px; scrollbar-width:none;}
+  .shelf-tabs::-webkit-scrollbar{display:none;}
+  .shelf-tab{
+    flex:0 0 auto; padding:7px 14px; border-radius:999px; border:none;
+    background:var(--card); color:var(--text-2); font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;
+    box-shadow:0 1px 4px rgba(0,0,0,0.06);
+  }
+  .shelf-tab.active{background:var(--text); color:#fff;}
+
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px 14px; padding:6px 20px 0;}
+  .book-card{cursor:pointer; position:relative;}
+  .cover{
+    width:100%; aspect-ratio:2/3; border-radius:8px; background:linear-gradient(135deg,#eee,#e2e2e2);
+    box-shadow:var(--shadow);
+    overflow:hidden; position:relative; display:flex; align-items:center; justify-content:center;
+  }
+  .cover img{width:100%; height:100%; object-fit:cover; display:block;}
+  .cover .fallback{font-size:11px; font-weight:700; padding:10px; text-align:center; color:var(--text-2); line-height:1.3;}
+  .badge{
+    position:absolute; top:6px; right:6px; width:20px; height:20px; border-radius:50%;
+    background:var(--green); display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:800;
+    box-shadow:0 1px 3px rgba(0,0,0,0.3);
+  }
+  .badge.reading{background:var(--accent);}
+  .progress-strip{height:3px; border-radius:2px; background:var(--line); margin-top:7px; overflow:hidden;}
+  .progress-strip > div{height:100%; background:var(--accent); border-radius:2px;}
+  .book-title{font-size:12.5px; font-weight:700; margin-top:6px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .book-pct{font-size:10.5px; color:var(--text-2); margin-top:2px;}
+
+  .empty-state{text-align:center; padding:60px 20px; color:var(--text-2);}
+  .empty-state h3{color:var(--text); margin-bottom:6px; font-size:19px;}
+  .empty-state button{margin-top:14px; background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:999px; font-weight:700; cursor:pointer;}
+
+  .new-shelf-row{display:flex; gap:8px; margin:16px 20px 0;}
+  .new-shelf-row input{flex:1; padding:11px 14px; border-radius:10px; border:none; background:var(--card); font-size:14px; box-shadow:var(--shadow);}
+  .new-shelf-row button{padding:11px 16px; border-radius:10px; border:none; background:var(--text); color:#fff; font-size:14px; font-weight:700; cursor:pointer;}
+  .shelf-row-item{display:flex;align-items:center;justify-content:space-between;background:var(--card);margin:10px 20px 0;padding:14px 16px;border-radius:12px;box-shadow:var(--shadow);}
+
+  .tabbar{
+    position:fixed; bottom:0; left:0; right:0; background:rgba(255,255,255,0.88); backdrop-filter:blur(14px);
+    border-top:0.5px solid var(--line); display:flex; justify-content:center; z-index:20;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tabbar-inner{max-width:640px; width:100%; display:flex;}
+  .tab-btn{
+    flex:1; border:none; background:none; padding:10px 4px 8px; color:var(--text-2);
+    font-size:10.5px; font-weight:600; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
+  }
+  .tab-btn.active{color:var(--accent);}
+  .tab-btn svg{width:23px; height:23px;}
+
+  #readerView{position:fixed; inset:0; background:#FAFAF8; z-index:50; display:none; flex-direction:column;}
+  #readerView.active{display:flex;}
+  .reader-top{
+    display:flex; align-items:center; justify-content:space-between; padding:14px 16px;
+    border-bottom:0.5px solid var(--line); background:#FAFAF8;
+  }
+  .reader-top .title{font-size:13px; font-weight:700; max-width:70%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap;}
+  .icon-btn{border:none; background:none; font-size:20px; cursor:pointer; color:var(--text); padding:4px 8px;}
+  #epubArea{flex:1; overflow:hidden; position:relative;}
+  #pdfArea{flex:1; overflow:auto; display:flex; flex-direction:column; align-items:center; background:#E9E9EB; padding:12px 0;}
+  #pdfArea canvas{box-shadow:0 4px 14px rgba(0,0,0,0.18); margin-bottom:10px; max-width:94%;}
+  .reader-bottom{
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border-top:0.5px solid var(--line);
+    display:flex; align-items:center; gap:12px; background:#FAFAF8;
+  }
+  .reader-bottom input[type=range]{flex:1; accent-color:var(--accent);}
+  .reader-pct{font-size:11px; width:38px; text-align:right; color:var(--text-2); font-variant-numeric:tabular-nums;}
+  .reader-nav{display:flex; gap:16px; align-items:center;}
+  .reader-nav button{border:none; background:#fff; width:34px; height:34px; border-radius:50%; font-size:16px; cursor:pointer; box-shadow:var(--shadow);}
+
+  .goal-card{
+    margin:10px 20px 0; background:linear-gradient(160deg,#2C2C2E,#1C1C1E); border-radius:20px; padding:24px 20px;
+    color:#fff; display:flex; align-items:center; gap:20px; box-shadow:0 10px 24px rgba(0,0,0,0.25);
+  }
+  .goal-ring-wrap{position:relative; width:104px; height:104px; flex:0 0 auto;}
+  .goal-ring-wrap svg{transform:rotate(-90deg);}
+  .goal-ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .goal-ring-center .n{font-size:26px; font-weight:800;}
+  .goal-ring-center .l{font-size:9px; color:#B0B0B5; text-transform:uppercase; letter-spacing:0.06em;}
+  .goal-info h3{margin:0 0 4px; font-size:16px; font-weight:800;}
+  .goal-info p{margin:0; font-size:12.5px; color:#B0B0B5; line-height:1.4;}
+  .goal-edit-btn{margin-top:10px; background:rgba(255,255,255,0.14); border:none; color:#fff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; cursor:pointer;}
+
+  .stat-cards{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 20px 0;}
+  .stat-card{background:var(--card); border-radius:16px; padding:16px; box-shadow:var(--shadow);}
+  .stat-num{font-size:28px; font-weight:800; line-height:1; letter-spacing:-0.02em;}
+  .stat-label{font-size:11.5px; color:var(--text-2); margin-top:5px; font-weight:600;}
+
+  .compare-card{margin:16px 20px 0; background:var(--card); border-radius:16px; padding:18px 18px 14px; box-shadow:var(--shadow);}
+  .compare-title{font-size:14px; font-weight:800; margin-bottom:12px;}
+  .compare-row{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .compare-year{font-size:12px; color:var(--text-2); width:38px; font-weight:700;}
+  .compare-bar-track{flex:1; height:18px; background:var(--bg-2); border-radius:6px; overflow:hidden;}
+  .compare-bar{height:100%; border-radius:6px; background:var(--accent); display:flex; align-items:center; justify-content:flex-end; padding-right:6px;}
+  .compare-bar.dim{background:var(--line);}
+  .compare-bar span{font-size:10.5px; font-weight:800; color:#fff;}
+  .compare-note{font-size:12px; color:var(--text-2); margin-top:4px;}
+
+  .heatmap-card{margin:16px 20px 0; background:var(--card); border-radius:16px; padding:18px; box-shadow:var(--shadow);}
+  .heatmap{display:grid; grid-template-columns:repeat(18,1fr); gap:3px; margin-top:10px;}
+  .heat-cell{aspect-ratio:1; border-radius:2px; background:var(--bg-2);}
+
+  .sheet-backdrop{position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:60; display:none; align-items:flex-end; justify-content:center;}
+  .sheet-backdrop.active{display:flex;}
+  .sheet{
+    background:var(--bg); width:100%; max-width:640px; border-radius:20px 20px 0 0;
+    padding:10px 20px calc(20px + env(safe-area-inset-bottom)); max-height:80vh; overflow-y:auto;
+  }
+  .sheet-handle{width:36px; height:5px; background:var(--line); border-radius:3px; margin:6px auto 14px;}
+  .sheet h3{margin:0 0 14px; font-size:19px;}
+  .sheet label{display:block; font-size:12px; font-weight:700; color:var(--text-2); margin:14px 0 5px;}
+  .sheet select, .sheet input[type=text], .sheet input[type=number]{
+    width:100%; padding:11px 12px; border-radius:10px; border:none; background:var(--bg-2); font-size:15px;
+  }
+  .sheet-actions{display:flex; gap:10px; margin-top:20px;}
+  .sheet-actions button{flex:1; padding:12px; border-radius:12px; border:none; font-weight:700; cursor:pointer; font-size:14px;}
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-ghost{background:var(--bg-2); color:var(--text);}
+  .btn-danger{background:none; color:var(--danger); text-align:left; padding:12px 4px; font-weight:700;}
+
+  input[type=file]{display:none;}
+  .toast{
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:var(--text); color:#fff;
+    padding:10px 18px; border-radius:999px; font-size:13px; z-index:90; opacity:0; transition:opacity .25s; pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="view active" id="libraryView">
+    <div class="header">
+      <div class="eyebrow"><span id="dateLabel"></span><button class="add-btn" id="addBookBtn">+</button></div>
+      <h1 id="shelfTitle">Library</h1>
+    </div>
+
+    <div id="continueSection" style="display:none;">
+      <div class="section-title">Continue Reading</div>
+      <div class="carousel" id="continueCarousel"></div>
+    </div>
+
+    <div class="shelf-tabs" id="shelfTabs"></div>
+    <div class="grid" id="bookGrid"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <h3>Nothing on the shelf yet</h3>
+      <p>Add an EPUB or PDF to start tracking.</p>
+      <button id="emptyAddBtn">Add a book</button>
+    </div>
+  </div>
+
+  <div class="view" id="shelvesView">
+    <div class="header"><h1>Shelves</h1></div>
+    <div id="shelfList"></div>
+    <div class="new-shelf-row">
+      <input type="text" id="newShelfInput" placeholder="New shelf name">
+      <button id="newShelfBtn">Add</button>
+    </div>
+  </div>
+
+  <div class="view" id="statsView">
+    <div class="header"><h1>Reading Goals</h1></div>
+
+    <div class="goal-card">
+      <div class="goal-ring-wrap">
+        <svg width="104" height="104" viewBox="0 0 104 104">
+          <circle cx="52" cy="52" r="45" fill="none" stroke="#3A3A3C" stroke-width="10"/>
+          <circle id="goalRingProgress" cx="52" cy="52" r="45" fill="none" stroke="url(#goalGrad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
+          <defs>
+            <linearGradient id="goalGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#FF5B39"/>
+              <stop offset="100%" stop-color="#FFB400"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="goal-ring-center">
+          <div class="n" id="goalDoneNum">0</div>
+          <div class="l" id="goalOfNum">of 0</div>
+        </div>
+      </div>
+      <div class="goal-info">
+        <h3 id="goalYearLabel">2026 Reading Goal</h3>
+        <p id="goalStatusText">Set a goal to see your progress here.</p>
+        <button class="goal-edit-btn" id="editGoalBtn">Edit goal</button>
+      </div>
+    </div>
+
+    <div class="stat-cards">
+      <div class="stat-card"><div class="stat-num" id="statStreak">0</div><div class="stat-label">Day streak</div></div>
+      <div class="stat-card"><div class="stat-num" id="statFinished">0</div><div class="stat-label">Finished this year</div></div>
+      <div class="stat-card"><div class="stat-num" id="statReading">0</div><div class="stat-label">Currently reading</div></div>
+      <div class="stat-card"><div class="stat-num" id="statHours">0h</div><div class="stat-label">Time reading</div></div>
+    </div>
+
+    <div class="compare-card">
+      <div class="compare-title">Books finished by year</div>
+      <div id="compareRows"></div>
+      <div class="compare-note" id="compareNote"></div>
+    </div>
+
+    <div class="heatmap-card">
+      <div class="compare-title">Last 18 weeks</div>
+      <div class="heatmap" id="heatmap"></div>
+    </div>
+  </div>
+
+  <div class="tabbar">
+    <div class="tabbar-inner">
+      <button class="tab-btn active" data-view="libraryView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5a1 1 0 0 1 1-1h4v16H5a1 1 0 0 1-1-1Z"/><path d="M9 4h6v16H9z"/><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4V4Z"/></svg>
+        Library
+      </button>
+      <button class="tab-btn" data-view="shelvesView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        Shelves
+      </button>
+      <button class="tab-btn" data-view="statsView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Goals
+      </button>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept=".epub,.pdf" multiple>
+</div>
+
+<div id="readerView">
+  <div class="reader-top">
+    <button class="icon-btn" id="closeReaderBtn">✕</button>
+    <div class="title" id="readerTitle"></div>
+    <button class="icon-btn" id="readerInfoBtn">⋯</button>
+  </div>
+  <div id="epubArea"></div>
+  <div id="pdfArea" style="display:none;"></div>
+  <div class="reader-bottom">
+    <div class="reader-nav"><button id="prevBtn">‹</button></div>
+    <input type="range" id="progressSlider" min="0" max="1000" value="0">
+    <div class="reader-pct" id="pctLabel">0%</div>
+    <div class="reader-nav"><button id="nextBtn">›</button></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="detailSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="detailTitle">Book</h3>
+    <label>Shelf</label>
+    <select id="detailShelfSelect"></select>
+    <label>Status</label>
+    <select id="detailStatusSelect">
+      <option value="unread">Not started</option>
+      <option value="reading">Reading</option>
+      <option value="finished">Finished</option>
+    </select>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="detailCloseBtn">Close</button>
+      <button class="btn-primary" id="detailOpenBtn">Open</button>
+    </div>
+    <button class="btn-danger" id="detailDeleteBtn">Remove from library</button>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="goalSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Set your reading goal</h3>
+    <label>Books to read this year</label>
+    <input type="number" id="goalInput" min="1" max="999" placeholder="e.g. 24">
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="goalCloseBtn">Cancel</button>
+      <button class="btn-primary" id="goalSaveBtn">Save goal</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+
+<script>
+const DB_NAME = 'shelfDB', DB_VERSION = 2;
+let db;
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('books')) d.createObjectStore('books', {keyPath:'id'});
+      if(!d.objectStoreNames.contains('shelves')) d.createObjectStore('shelves', {keyPath:'id'});
+      if(!d.objectStoreNames.contains('sessions')) d.createObjectStore('sessions', {keyPath:'id', autoIncrement:true});
+      if(!d.objectStoreNames.contains('settings')) d.createObjectStore('settings', {keyPath:'key'});
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = (e) => reject(e);
+  });
+}
+function tx(store, mode='readonly'){ return db.transaction(store, mode).objectStore(store); }
+function idbAll(store){ return new Promise((res) => { const out=[]; tx(store).openCursor().onsuccess = e => { const c=e.target.result; if(c){ out.push(c.value); c.continue(); } else res(out); }; }); }
+function idbGet(store, key){ return new Promise((res) => { const r = tx(store).get(key); r.onsuccess = () => res(r.result); }); }
+function idbPut(store, val){ return new Promise((res) => { const r = tx(store,'readwrite').put(val); r.onsuccess = () => res(val); }); }
+function idbDelete(store, key){ return new Promise((res) => { const r = tx(store,'readwrite').delete(key); r.onsuccess = () => res(); }); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+let books = [], shelves = [], currentShelfFilter = 'all';
+let activeBook = null, epubRendition = null, epubBook = null, pdfDoc = null, pdfPage = 1, pdfTotalPages = 1;
+let sessionStart = null, sessionBookId = null;
+let readingGoal = null;
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await openDB();
+  books = await idbAll('books');
+  shelves = await idbAll('shelves');
+  if(shelves.length === 0){
+    shelves = [{id:'reading-now', name:'Reading now'}, {id:'want-to-read', name:'Want to read'}];
+    for(const s of shelves) await idbPut('shelves', s);
+  }
+  const goalRec = await idbGet('settings', 'yearlyGoal');
+  readingGoal = goalRec ? goalRec.value : null;
+
+  const now = new Date();
+  $('#dateLabel').textContent = now.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'});
+
+  renderShelfTabs();
+  renderShelfManageList();
+  renderLibrary();
+  renderStats();
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+});
+
+$$('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.tab-btn').forEach(b=>b.classList.remove('active'));
+    $$('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    $('#'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view === 'statsView') renderStats();
+  });
+});
+
+$('#addBookBtn').addEventListener('click', () => $('#fileInput').click());
+$('#emptyAddBtn').addEventListener('click', () => $('#fileInput').click());
+$('#fileInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  for(const file of files){
+    await importFile(file);
+  }
+  e.target.value = '';
+  books = await idbAll('books');
+  renderLibrary();
+});
+
+pdfjsLib.GlobalWorkerOptions.workerSrc = 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+
+async function importFile(file){
+  const ext = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'epub';
+  const id = uid();
+  toast('Adding ' + file.name + '…');
+  try{
+    if(ext === 'epub'){
+      const arrayBuf = await file.arrayBuffer();
+      const book = ePub(arrayBuf.slice(0));
+      await book.ready;
+      const meta = await book.loaded.metadata;
+      let coverDataUrl = null;
+      try{
+        const coverUrl = await book.coverUrl();
+        if(coverUrl) coverDataUrl = await urlToDataUrl(coverUrl);
+      }catch(err){}
+      const record = {
+        id, title: meta.title || file.name.replace(/\.epub$/i,''), author: meta.creator || '',
+        format:'epub', fileBlob: file, coverDataUrl, shelf: null, status:'unread',
+        addedAt: Date.now(), finishedAt:null
+      };
+      await idbPut('books', record);
+    } else {
+      const arrayBuf = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({data: arrayBuf.slice(0)});
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({scale: 0.5});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+      const coverDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      const record = {
+        id, title: file.name.replace(/\.pdf$/i,''), author:'',
+        format:'pdf', fileBlob: file, coverDataUrl, shelf:null, status:'unread',
+        addedAt: Date.now(), finishedAt:null, totalPages: pdf.numPages, currentPage:1
+      };
+      await idbPut('books', record);
+    }
+    toast('Added to library');
+  }catch(err){
+    console.error(err);
+    toast('Could not read ' + file.name);
+  }
+}
+
+function urlToDataUrl(url){
+  return fetch(url).then(r=>r.blob()).then(blob => new Promise((res)=>{
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result);
+    reader.readAsDataURL(blob);
+  }));
+}
+
+function renderShelfTabs(){
+  const tabs = $('#shelfTabs');
+  const all = [{id:'all', name:'All books'}, ...shelves];
+  tabs.innerHTML = all.map(s => `<button class="shelf-tab ${currentShelfFilter===s.id?'active':''}" data-id="${s.id}">${escapeHtml(s.name)}</button>`).join('');
+  tabs.querySelectorAll('.shelf-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentShelfFilter = btn.dataset.id;
+      renderShelfTabs();
+      renderLibrary();
+    });
+  });
+}
+
+function renderLibrary(){
+  const continuing = books.filter(b => b.status==='reading').sort((a,b)=> (b.lastOpenedAt||0)-(a.lastOpenedAt||0));
+  $('#continueSection').style.display = continuing.length ? 'block' : 'none';
+  $('#continueCarousel').innerHTML = continuing.map(b => {
+    const pct = bookPercent(b);
+    return `
+    <div class="carousel-card" data-id="${b.id}">
+      <div class="cover">${b.coverDataUrl ? `<img src="${b.coverDataUrl}" alt="">` : `<div class="fallback">${escapeHtml(b.title)}</div>`}</div>
+      <div class="carousel-title">${escapeHtml(b.title)}</div>
+      <div class="carousel-sub">${pct}% read</div>
+      <div class="mini-progress"><div style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+  $('#continueCarousel').querySelectorAll('.carousel-card').forEach(c => c.addEventListener('click', () => openReader(c.dataset.id)));
+
+  const grid = $('#bookGrid');
+  const filtered = currentShelfFilter==='all' ? books : books.filter(b=>b.shelf===currentShelfFilter);
+  $('#shelfTitle').textContent = currentShelfFilter==='all' ? 'Library' : (shelves.find(s=>s.id===currentShelfFilter)?.name || 'Library');
+  $('#emptyState').style.display = filtered.length ? 'none' : 'block';
+  grid.style.display = filtered.length ? 'grid' : 'none';
+  grid.innerHTML = filtered.sort((a,b)=>b.addedAt-a.addedAt).map(b => {
+    const pct = bookPercent(b);
+    let badge = '';
+    if(b.status==='finished') badge = `<div class="badge">✓</div>`;
+    else if(b.status==='reading') badge = `<div class="badge reading">${pct}</div>`;
+    return `
+    <div class="book-card" data-id="${b.id}">
+      <div class="cover">
+        ${b.coverDataUrl ? `<img src="${b.coverDataUrl}" alt="">` : `<div class="fallback">${escapeHtml(b.title)}</div>`}
+        ${badge}
+      </div>
+      <div class="progress-strip"><div style="width:${pct}%"></div></div>
+      <div class="book-title">${escapeHtml(b.title)}</div>
+      <div class="book-pct">${b.status==='finished' ? 'Finished' : pct+'% read'}</div>
+    </div>`;
+  }).join('');
+  grid.querySelectorAll('.book-card').forEach(card => {
+    card.addEventListener('click', () => openDetailSheet(card.dataset.id));
+  });
+}
+
+function bookPercent(b){
+  if(b.format==='pdf'){
+    if(!b.totalPages) return 0;
+    return Math.round(((b.currentPage||1)/b.totalPages)*100);
+  }
+  return Math.round((b.percent||0)*100);
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderShelfManageList(){
+  const list = $('#shelfList');
+  list.innerHTML = shelves.map(s => `
+    <div class="shelf-row-item">
+      <span style="font-weight:700;">${escapeHtml(s.name)}</span>
+      <button data-id="${s.id}" class="delShelfBtn" style="border:none;background:none;color:var(--danger);font-size:13px;cursor:pointer;font-weight:700;">Remove</button>
+    </div>`).join('') || `<p style="color:var(--text-2); padding:0 20px;">No shelves yet.</p>`;
+  list.querySelectorAll('.delShelfBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      shelves = shelves.filter(s=>s.id!==id);
+      await idbDelete('shelves', id);
+      for(const b of books.filter(b=>b.shelf===id)){ b.shelf=null; await idbPut('books', b); }
+      renderShelfManageList(); renderShelfTabs(); renderLibrary();
+    });
+  });
+}
+$('#newShelfBtn').addEventListener('click', async () => {
+  const input = $('#newShelfInput');
+  const name = input.value.trim();
+  if(!name) return;
+  const s = {id: uid(), name};
+  shelves.push(s);
+  await idbPut('shelves', s);
+  input.value = '';
+  renderShelfManageList(); renderShelfTabs();
+});
+
+let detailBookId = null;
+function openDetailSheet(id){
+  const b = books.find(x=>x.id===id);
+  if(!b) return;
+  detailBookId = id;
+  $('#detailTitle').textContent = b.title;
+  const sel = $('#detailShelfSelect');
+  sel.innerHTML = `<option value="">No shelf</option>` + shelves.map(s=>`<option value="${s.id}" ${b.shelf===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
+  $('#detailStatusSelect').value = b.status || 'unread';
+  $('#detailSheet').classList.add('active');
+}
+$('#detailCloseBtn').addEventListener('click', () => $('#detailSheet').classList.remove('active'));
+$('#detailSheet').addEventListener('click', (e) => { if(e.target===$('#detailSheet')) $('#detailSheet').classList.remove('active'); });
+$('#detailShelfSelect').addEventListener('change', async (e) => {
+  const b = books.find(x=>x.id===detailBookId);
+  b.shelf = e.target.value || null;
+  await idbPut('books', b);
+  renderLibrary();
+});
+$('#detailStatusSelect').addEventListener('change', async (e) => {
+  const b = books.find(x=>x.id===detailBookId);
+  b.status = e.target.value;
+  if(b.status==='finished'){ b.finishedAt = Date.now(); if(b.format==='pdf') b.currentPage=b.totalPages; else b.percent=1; }
+  await idbPut('books', b);
+  renderLibrary(); renderStats();
+});
+$('#detailOpenBtn').addEventListener('click', () => {
+  $('#detailSheet').classList.remove('active');
+  openReader(detailBookId);
+});
+$('#detailDeleteBtn').addEventListener('click', async () => {
+  await idbDelete('books', detailBookId);
+  books = books.filter(b=>b.id!==detailBookId);
+  $('#detailSheet').classList.remove('active');
+  renderLibrary(); renderStats();
+});
+
+async function openReader(id){
+  const b = books.find(x=>x.id===id);
+  if(!b) return;
+  activeBook = b;
+  b.lastOpenedAt = Date.now();
+  if(b.status==='unread'){ b.status='reading'; }
+  await idbPut('books', b);
+  renderLibrary();
+  $('#readerTitle').textContent = b.title;
+  $('#readerView').classList.add('active');
+  sessionStart = Date.now();
+  sessionBookId = b.id;
+
+  if(b.format==='epub'){
+    $('#epubArea').style.display='block'; $('#pdfArea').style.display='none';
+    $('#epubArea').innerHTML = '';
+    const arrayBuf = await b.fileBlob.arrayBuffer();
+    epubBook = ePub(arrayBuf);
+    epubRendition = epubBook.renderTo('epubArea', {width:'100%', height:'100%', spread:'none'});
+    const startCfi = b.location || undefined;
+    await epubRendition.display(startCfi);
+    epubBook.locations.generate(1000).then(() => {
+      if(b.percent){
+        const cfi = epubBook.locations.cfiFromPercentage(b.percent);
+        if(!startCfi) epubRendition.display(cfi);
+      }
+    });
+    epubRendition.on('relocated', (loc) => {
+      const pct = epubBook.locations.length() ? epubBook.locations.percentageFromCfi(loc.start.cfi) : 0;
+      b.percent = pct || b.percent || 0;
+      b.location = loc.start.cfi;
+      $('#progressSlider').value = Math.round((b.percent||0)*1000);
+      $('#pctLabel').textContent = Math.round((b.percent||0)*100) + '%';
+      idbPut('books', b);
+    });
+    $('#prevBtn').onclick = () => epubRendition.prev();
+    $('#nextBtn').onclick = () => epubRendition.next();
+    $('#progressSlider').oninput = (e) => {
+      const pct = e.target.value/1000;
+      const cfi = epubBook.locations.cfiFromPercentage(pct);
+      epubRendition.display(cfi);
+    };
+    $('#progressSlider').value = Math.round((b.percent||0)*1000);
+    $('#pctLabel').textContent = Math.round((b.percent||0)*100) + '%';
+  } else {
+    $('#epubArea').style.display='none'; $('#pdfArea').style.display='flex';
+    const area = $('#pdfArea'); area.innerHTML='';
+    const arrayBuf = await b.fileBlob.arrayBuffer();
+    pdfDoc = await pdfjsLib.getDocument({data: arrayBuf}).promise;
+    pdfTotalPages = pdfDoc.numPages;
+    pdfPage = b.currentPage || 1;
+    await renderPdfPage();
+    $('#progressSlider').max = pdfTotalPages;
+    $('#progressSlider').value = pdfPage;
+    updatePdfPct();
+    $('#prevBtn').onclick = () => changePdfPage(-1);
+    $('#nextBtn').onclick = () => changePdfPage(1);
+    $('#progressSlider').oninput = (e) => { pdfPage = parseInt(e.target.value); renderPdfPage(); updatePdfPct(); saveBook(); };
+  }
+}
+
+async function renderPdfPage(){
+  const page = await pdfDoc.getPage(pdfPage);
+  const viewport = page.getViewport({scale: 1.3});
+  const area = $('#pdfArea');
+  area.innerHTML = '';
+  const canvas = document.createElement('canvas');
+  canvas.width = viewport.width; canvas.height = viewport.height;
+  await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+  area.appendChild(canvas);
+}
+function updatePdfPct(){
+  const pct = Math.round((pdfPage/pdfTotalPages)*100);
+  $('#pctLabel').textContent = pct + '%';
+  $('#progressSlider').value = pdfPage;
+}
+function changePdfPage(delta){
+  pdfPage = Math.min(pdfTotalPages, Math.max(1, pdfPage+delta));
+  renderPdfPage(); updatePdfPct(); saveBook();
+}
+async function saveBook(){
+  if(!activeBook) return;
+  if(activeBook.format==='pdf') activeBook.currentPage = pdfPage;
+  await idbPut('books', activeBook);
+}
+
+$('#closeReaderBtn').addEventListener('click', async () => {
+  await saveBook();
+  await endSession();
+  $('#readerView').classList.remove('active');
+  epubRendition = null; epubBook = null; pdfDoc = null;
+  books = await idbAll('books');
+  renderLibrary(); renderStats();
+});
+$('#readerInfoBtn').addEventListener('click', () => { if(activeBook) openDetailSheet(activeBook.id); });
+
+async function endSession(){
+  if(!sessionStart || !sessionBookId) return;
+  const minutes = Math.max(0, Math.round((Date.now()-sessionStart)/60000));
+  if(minutes > 0){
+    const today = new Date().toISOString().slice(0,10);
+    await idbPut('sessions', {id: undefined, bookId: sessionBookId, date: today, minutes});
+  }
+  sessionStart = null; sessionBookId = null;
+}
+document.addEventListener('visibilitychange', () => {
+  if(document.hidden && sessionStart){ endSession(); sessionStart = Date.now(); }
+});
+
+$('#editGoalBtn').addEventListener('click', () => {
+  $('#goalInput').value = readingGoal || '';
+  $('#goalSheet').classList.add('active');
+});
+$('#goalCloseBtn').addEventListener('click', () => $('#goalSheet').classList.remove('active'));
+$('#goalSheet').addEventListener('click', (e) => { if(e.target===$('#goalSheet')) $('#goalSheet').classList.remove('active'); });
+$('#goalSaveBtn').addEventListener('click', async () => {
+  const val = parseInt($('#goalInput').value);
+  if(!val || val < 1){ toast('Enter a number of books'); return; }
+  readingGoal = val;
+  await idbPut('settings', {key:'yearlyGoal', value: val});
+  $('#goalSheet').classList.remove('active');
+  renderStats();
+  toast('Goal saved');
+});
+
+async function renderStats(){
+  const sessions = await idbAll('sessions');
+  const year = new Date().getFullYear();
+  const finishedThisYear = books.filter(b => b.status==='finished' && b.finishedAt && new Date(b.finishedAt).getFullYear()===year).length;
+  const reading = books.filter(b => b.status==='reading').length;
+  const totalMinutes = sessions.reduce((s,x)=>s+x.minutes,0);
+  $('#statFinished').textContent = finishedThisYear;
+  $('#statReading').textContent = reading;
+  $('#statHours').textContent = (totalMinutes/60).toFixed(1)+'h';
+
+  const days = new Set(sessions.map(s=>s.date));
+  let streak = 0;
+  let cursor = new Date();
+  while(true){
+    const key = cursor.toISOString().slice(0,10);
+    if(days.has(key)){ streak++; cursor.setDate(cursor.getDate()-1); }
+    else break;
+  }
+  $('#statStreak').textContent = streak;
+
+  $('#goalYearLabel').textContent = year + ' Reading Goal';
+  const circumference = 283;
+  if(readingGoal){
+    const frac = Math.min(1, finishedThisYear/readingGoal);
+    $('#goalRingProgress').setAttribute('stroke-dashoffset', Math.round(circumference*(1-frac)));
+    $('#goalDoneNum').textContent = finishedThisYear;
+    $('#goalOfNum').textContent = 'of ' + readingGoal;
+    if(finishedThisYear >= readingGoal){
+      $('#goalStatusText').textContent = `Goal complete! You've read ${finishedThisYear} books this year.`;
+    } else {
+      const remaining = readingGoal - finishedThisYear;
+      const now = new Date();
+      const daysLeft = Math.ceil((new Date(year,11,31) - now) / 86400000);
+      const weeksLeft = Math.max(1, Math.round(daysLeft/7));
+      const perWeeks = Math.max(1,Math.round(weeksLeft/remaining));
+      $('#goalStatusText').textContent = `${remaining} more book${remaining===1?'':'s'} to go — about 1 every ${perWeeks} week${perWeeks>=2?'s':''}.`;
+    }
+  } else {
+    $('#goalRingProgress').setAttribute('stroke-dashoffset', circumference);
+    $('#goalDoneNum').textContent = finishedThisYear;
+    $('#goalOfNum').textContent = 'no goal';
+    $('#goalStatusText').textContent = `You've finished ${finishedThisYear} book${finishedThisYear===1?'':'s'} this year. Set a goal to track progress.`;
+  }
+
+  const byYear = {};
+  books.filter(b=>b.status==='finished' && b.finishedAt).forEach(b => {
+    const y = new Date(b.finishedAt).getFullYear();
+    byYear[y] = (byYear[y]||0)+1;
+  });
+  const years = [];
+  for(let y=year; y>=year-3; y--) years.push(y);
+  const maxCount = Math.max(1, ...years.map(y=>byYear[y]||0));
+  $('#compareRows').innerHTML = years.map(y => {
+    const count = byYear[y]||0;
+    const pct = Math.max(6, Math.round((count/maxCount)*100));
+    return `
+    <div class="compare-row">
+      <div class="compare-year">${y}</div>
+      <div class="compare-bar-track"><div class="compare-bar ${y===year?'':'dim'}" style="width:${pct}%"><span>${count>0?count:''}</span></div></div>
+    </div>`;
+  }).join('');
+  const thisYearCount = byYear[year]||0, lastYearCount = byYear[year-1]||0;
+  if(lastYearCount === 0 && thisYearCount === 0){
+    $('#compareNote').textContent = '';
+  } else if(lastYearCount === 0){
+    $('#compareNote').textContent = `First tracked year — keep going!`;
+  } else {
+    const diff = thisYearCount - lastYearCount;
+    const pctDiff = Math.round((diff/lastYearCount)*100);
+    if(diff > 0) $('#compareNote').textContent = `You're reading ${pctDiff}% more than this time last year.`;
+    else if(diff < 0) $('#compareNote').textContent = `${Math.abs(pctDiff)}% behind this time last year — you've got this.`;
+    else $('#compareNote').textContent = `Right on pace with last year.`;
+  }
+
+  const minutesByDate = {};
+  sessions.forEach(s => { minutesByDate[s.date] = (minutesByDate[s.date]||0) + s.minutes; });
+  const cells = [];
+  const totalDays = 18*7;
+  const start = new Date();
+  start.setDate(start.getDate() - (totalDays-1));
+  for(let i=0;i<totalDays;i++){
+    const d = new Date(start); d.setDate(start.getDate()+i);
+    const key = d.toISOString().slice(0,10);
+    const m = minutesByDate[key] || 0;
+    let alpha = 0;
+    if(m>0 && m<15) alpha=0.35; else if(m<30) alpha=0.55; else if(m<60) alpha=0.75; else if(m>=60) alpha=1;
+    cells.push(`<div class="heat-cell" style="background:${alpha? `rgba(255,91,57,${alpha})`:'var(--bg-2)'}" title="${key}: ${m}m"></div>`);
+  }
+  $('#heatmap').innerHTML = cells.join('');
+}
+</script>
+</body>
+</html>
