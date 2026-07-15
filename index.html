@@ -1,0 +1,1584 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+<meta charset="UTF-8">
+<meta name="viewport" content="width=device-width, initial-scale=1, viewport-fit=cover">
+<title>DeeDee Books</title>
+<link rel="manifest" href="manifest.json">
+<meta name="theme-color" content="#FFFFFF">
+<link rel="apple-touch-icon" href="icons/icon-192.png">
+<link rel="icon" href="icons/icon-192.png">
+<script src="https://cdnjs.cloudflare.com/ajax/libs/jszip/3.10.1/jszip.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/epubjs/0.3.93/epub.min.js"></script>
+<script src="https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.min.js"></script>
+<script>
+  // Fallback loader: if a library failed to load from cdnjs (blocked/slow network),
+  // retry once from a different CDN before the app tries to use it.
+  window.__libSources = {};
+  function loadScriptFallback(name, check, url){
+    return new Promise((resolve) => {
+      if(check()){ window.__libSources[name] = 'cdnjs'; resolve(true); return; }
+      const s = document.createElement('script');
+      s.src = url;
+      s.onload = () => { const ok = check(); if(ok) window.__libSources[name] = 'fallback'; resolve(ok); };
+      s.onerror = () => resolve(false);
+      document.head.appendChild(s);
+    });
+  }
+  window.__libsReady = Promise.all([
+    loadScriptFallback('jszip', () => typeof JSZip !== 'undefined', 'https://unpkg.com/jszip@3.10.1/dist/jszip.min.js'),
+    loadScriptFallback('epubjs', () => typeof ePub !== 'undefined', 'https://unpkg.com/epubjs@0.3.93/dist/epub.min.js'),
+    loadScriptFallback('pdfjs', () => typeof pdfjsLib !== 'undefined', 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.min.js')
+  ]);
+</script>
+<style>
+  :root{
+    --bg:#FFFFFF; --bg-2:#F2F2F7; --text:#1C1C1E; --text-2:#8E8E93;
+    --accent:#FF5B39; --accent-2:#FFB400; --line:#E5E5EA; --card:#FFFFFF;
+    --danger:#FF3B30; --green:#34C759;
+    --shadow:0 8px 20px rgba(0,0,0,0.08);
+    --reader-bg:#FAFAF8; --reader-line:#E5E5EA;
+  }
+  html[data-theme="dark"]{
+    --bg:#000000; --bg-2:#1C1C1E; --text:#F2F2F7; --text-2:#98989D;
+    --accent:#FF6A4D; --accent-2:#FFC53D; --line:#2C2C2E; --card:#1C1C1E;
+    --danger:#FF453A; --green:#30D158;
+    --shadow:0 8px 20px rgba(0,0,0,0.4);
+    --reader-bg:#121212; --reader-line:#2C2C2E;
+  }
+  *{box-sizing:border-box; -webkit-tap-highlight-color:transparent;}
+  html,body{height:100%;}
+  body{
+    margin:0; background:var(--bg-2); color:var(--text);
+    font-family:-apple-system,BlinkMacSystemFont,"SF Pro Display",Inter,Roboto,system-ui,sans-serif;
+    overscroll-behavior-y:none; transition:background .2s,color .2s;
+  }
+  button{font-family:inherit;}
+  #app{max-width:640px; margin:0 auto; min-height:100vh; display:flex; flex-direction:column; position:relative; background:var(--bg-2);}
+
+  .header{ padding:8px 20px 4px; background:var(--bg-2); position:sticky; top:0; z-index:10; }
+  .header .eyebrow{font-size:13px; color:var(--accent); font-weight:600; display:flex; align-items:center; justify-content:space-between; gap:8px;}
+  .header-actions{display:flex; gap:8px; align-items:center;}
+  .header h1{font-size:34px; font-weight:800; margin:0; letter-spacing:-0.02em;}
+  .icon-round-btn{
+    width:32px; height:32px; border-radius:50%; border:none; background:var(--card); color:var(--text);
+    font-size:15px; line-height:1; cursor:pointer; display:flex; align-items:center; justify-content:center;
+    box-shadow:var(--shadow);
+  }
+  .add-btn{ background:var(--accent); color:#fff; font-size:19px; }
+  .icon-round-btn:active{transform:scale(0.92);}
+  .icon-round-btn svg{width:15px; height:15px;}
+
+  .search-row{padding:6px 20px 4px; display:none;}
+  .search-row.active{display:block;}
+  .search-row input{
+    width:100%; padding:10px 14px; border-radius:10px; border:none; background:var(--card); color:var(--text);
+    font-size:14px; box-shadow:var(--shadow);
+  }
+
+  .sort-row{display:flex; align-items:center; justify-content:flex-end; padding:2px 20px 0;}
+  .sort-row select{
+    border:none; background:transparent; color:var(--text-2); font-size:12.5px; font-weight:700; padding:4px 2px;
+  }
+
+  .view{flex:1; padding:0 0 100px; display:none;}
+  .view.active{display:block;}
+
+  .section-title{font-size:20px; font-weight:800; padding:18px 20px 8px; letter-spacing:-0.01em;}
+  .carousel{display:flex; gap:14px; overflow-x:auto; padding:4px 20px 10px; scrollbar-width:none;}
+  .carousel::-webkit-scrollbar{display:none;}
+  .carousel-card{flex:0 0 128px; cursor:pointer;}
+  .carousel .cover{width:128px; height:192px;}
+  .carousel-title{font-size:13px; font-weight:700; margin-top:8px; line-height:1.25; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .carousel-sub{font-size:12px; color:var(--text-2); margin-top:2px;}
+  .mini-progress{height:3px; border-radius:2px; background:var(--line); margin-top:6px; width:128px; overflow:hidden;}
+  .mini-progress>div{height:100%; background:var(--accent);}
+
+  .shelf-tabs{display:flex; gap:8px; overflow-x:auto; padding:6px 20px 12px; scrollbar-width:none;}
+  .shelf-tabs::-webkit-scrollbar{display:none;}
+  .shelf-tab{
+    flex:0 0 auto; padding:7px 14px; border-radius:999px; border:none;
+    background:var(--card); color:var(--text-2); font-size:13px; font-weight:600; cursor:pointer; white-space:nowrap;
+    box-shadow:0 1px 4px rgba(0,0,0,0.06);
+  }
+  .shelf-tab.active{background:var(--text); color:var(--bg);}
+
+  .grid{display:grid; grid-template-columns:repeat(3,1fr); gap:20px 14px; padding:6px 20px 0;}
+  .book-card{cursor:pointer; position:relative;}
+  .cover{
+    width:100%; aspect-ratio:2/3; border-radius:8px; background:linear-gradient(135deg,var(--bg-2),var(--line));
+    box-shadow:var(--shadow);
+    overflow:hidden; position:relative; display:flex; align-items:center; justify-content:center;
+  }
+  .cover img{width:100%; height:100%; object-fit:cover; display:block;}
+  .cover .fallback{font-size:11px; font-weight:700; padding:10px; text-align:center; color:var(--text-2); line-height:1.3;}
+  .badge{
+    position:absolute; top:6px; right:6px; width:20px; height:20px; border-radius:50%;
+    background:var(--green); display:flex; align-items:center; justify-content:center; color:#fff; font-size:12px; font-weight:800;
+    box-shadow:0 1px 3px rgba(0,0,0,0.3);
+  }
+  .badge.reading{background:var(--accent);}
+  .progress-strip{height:3px; border-radius:2px; background:var(--line); margin-top:7px; overflow:hidden;}
+  .progress-strip > div{height:100%; background:var(--accent); border-radius:2px;}
+  .book-title{font-size:12.5px; font-weight:700; margin-top:6px; line-height:1.3; display:-webkit-box; -webkit-line-clamp:2; -webkit-box-orient:vertical; overflow:hidden;}
+  .book-pct{font-size:10.5px; color:var(--text-2); margin-top:2px;}
+
+  .series-group{padding:0 20px; margin-top:18px;}
+  .series-label{font-size:14px; font-weight:800; margin-bottom:10px; color:var(--text-2);}
+
+  .empty-state{text-align:center; padding:60px 20px; color:var(--text-2);}
+  .empty-state h3{color:var(--text); margin-bottom:6px; font-size:19px;}
+  .empty-state button{margin-top:14px; background:var(--accent); color:#fff; border:none; padding:11px 22px; border-radius:999px; font-weight:700; cursor:pointer;}
+
+  .new-shelf-row{display:flex; gap:8px; margin:16px 20px 0;}
+  .new-shelf-row input{flex:1; padding:11px 14px; border-radius:10px; border:none; background:var(--card); color:var(--text); font-size:14px; box-shadow:var(--shadow);}
+  .new-shelf-row button{padding:11px 16px; border-radius:10px; border:none; background:var(--text); color:var(--bg); font-size:14px; font-weight:700; cursor:pointer;}
+  .shelf-row-item{display:flex;align-items:center;justify-content:space-between;background:var(--card);margin:10px 20px 0;padding:14px 16px;border-radius:12px;box-shadow:var(--shadow);}
+
+  .tabbar{
+    position:fixed; bottom:0; left:0; right:0; background:var(--bg); opacity:0.96; backdrop-filter:blur(14px);
+    border-top:0.5px solid var(--line); display:flex; justify-content:center; z-index:20;
+    padding-bottom:env(safe-area-inset-bottom);
+  }
+  .tabbar-inner{max-width:640px; width:100%; display:flex;}
+  .tab-btn{
+    flex:1; border:none; background:none; padding:10px 4px 8px; color:var(--text-2);
+    font-size:10px; font-weight:600; display:flex; flex-direction:column; align-items:center; gap:3px; cursor:pointer;
+  }
+  .tab-btn.active{color:var(--accent);}
+  .tab-btn svg{width:22px; height:22px;}
+
+  #readerView{position:fixed; inset:0; background:var(--reader-bg); z-index:50; display:none; flex-direction:column;}
+  #readerView.active{display:flex;}
+  .reader-top{
+    display:flex; align-items:center; justify-content:space-between; padding:14px 16px;
+    border-bottom:0.5px solid var(--reader-line); background:var(--reader-bg);
+  }
+  .reader-top .title{font-size:13px; font-weight:700; max-width:60%; overflow:hidden; text-overflow:ellipsis; white-space:nowrap; color:var(--text);}
+  .reader-top .actions{display:flex; gap:6px;}
+  .icon-btn{border:none; background:none; font-size:19px; cursor:pointer; color:var(--text); padding:4px 8px;}
+  #epubArea{flex:1; overflow:hidden; position:relative;}
+  #pdfArea{flex:1; overflow:auto; display:flex; flex-direction:column; align-items:center; background:var(--bg-2); padding:12px 0;}
+  #pdfArea canvas{box-shadow:0 4px 14px rgba(0,0,0,0.18); margin-bottom:10px; max-width:94%;}
+  .reader-bottom{
+    padding:10px 16px calc(10px + env(safe-area-inset-bottom)); border-top:0.5px solid var(--reader-line);
+    display:flex; align-items:center; gap:12px; background:var(--reader-bg);
+  }
+  .reader-bottom input[type=range]{flex:1; accent-color:var(--accent);}
+  .reader-pct{font-size:11px; width:38px; text-align:right; color:var(--text-2); font-variant-numeric:tabular-nums;}
+  .reader-nav{display:flex; gap:16px; align-items:center;}
+  .reader-nav button{border:none; background:var(--card); width:34px; height:34px; border-radius:50%; font-size:16px; cursor:pointer; box-shadow:var(--shadow); color:var(--text);}
+
+  .goal-card{cursor:pointer;
+    margin:10px 20px 0; background:linear-gradient(160deg,#2C2C2E,#0F0F10); border-radius:20px; padding:24px 20px;
+    color:#fff; display:flex; align-items:center; gap:20px; box-shadow:0 10px 24px rgba(0,0,0,0.25);
+  }
+  .goal-ring-wrap{position:relative; width:104px; height:104px; flex:0 0 auto;}
+  .goal-ring-wrap svg{transform:rotate(-90deg);}
+  .goal-ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .goal-ring-center .n{font-size:26px; font-weight:800;}
+  .goal-ring-center .l{font-size:9px; color:#B0B0B5; text-transform:uppercase; letter-spacing:0.06em;}
+  .goal-info h3{margin:0 0 4px; font-size:16px; font-weight:800;}
+  .goal-info p{margin:0; font-size:12.5px; color:#B0B0B5; line-height:1.4;}
+  .goal-edit-btn{margin-top:10px; background:rgba(255,255,255,0.14); border:none; color:#fff; font-size:12px; font-weight:700; padding:6px 12px; border-radius:999px; cursor:pointer;}
+
+  .stat-cards{display:grid; grid-template-columns:1fr 1fr; gap:12px; margin:16px 20px 0;}
+  .stat-card{background:var(--card); border-radius:16px; padding:16px; box-shadow:var(--shadow); cursor:pointer;}
+  .stat-num{font-size:28px; font-weight:800; line-height:1; letter-spacing:-0.02em;}
+  .stat-label{font-size:11.5px; color:var(--text-2); margin-top:5px; font-weight:600;}
+
+  .compare-card{margin:16px 20px 0; background:var(--card); border-radius:16px; padding:18px 18px 14px; box-shadow:var(--shadow);}
+  .compare-title{font-size:14px; font-weight:800; margin-bottom:12px;}
+  .compare-row{display:flex; align-items:center; gap:10px; margin-bottom:10px;}
+  .compare-year{font-size:12px; color:var(--text-2); width:38px; font-weight:700;}
+  .compare-bar-track{flex:1; height:18px; background:var(--bg-2); border-radius:6px; overflow:hidden;}
+  .compare-bar{height:100%; border-radius:6px; background:var(--accent); display:flex; align-items:center; justify-content:flex-end; padding-right:6px;}
+  .compare-bar.dim{background:var(--line);}
+  .compare-bar span{font-size:10.5px; font-weight:800; color:#fff;}
+  .compare-note{font-size:12px; color:var(--text-2); margin-top:4px;}
+
+
+  .settings-group{margin:16px 20px 0; background:var(--card); border-radius:16px; box-shadow:var(--shadow); overflow:hidden;}
+  .settings-row{display:flex; align-items:center; justify-content:space-between; padding:15px 16px; border-bottom:1px solid var(--line);}
+  .settings-row:last-child{border-bottom:none;}
+  .settings-row .label{font-size:14.5px; font-weight:600;}
+  .settings-row .sub{font-size:11.5px; color:var(--text-2); margin-top:2px;}
+  .settings-row select{border:none; background:var(--bg-2); color:var(--text); padding:8px 10px; border-radius:8px; font-size:13px; font-weight:600;}
+  .settings-btn{border:none; background:none; color:var(--accent); font-size:14.5px; font-weight:700; cursor:pointer; padding:0;}
+
+  .note-item{background:var(--bg-2); border-radius:12px; padding:12px 14px; margin-bottom:10px;}
+  .note-item .meta{font-size:10.5px; color:var(--text-2); margin-bottom:4px; font-weight:600;}
+  .note-item .txt{font-size:13.5px; line-height:1.4;}
+  .note-del{border:none;background:none;color:var(--danger);font-size:11px;font-weight:700;cursor:pointer;margin-top:6px;padding:0;}
+
+  .sheet-backdrop{position:fixed; inset:0; background:rgba(0,0,0,0.4); z-index:60; display:none; align-items:flex-end; justify-content:center;}
+  .sheet-backdrop.active{display:flex;}
+  .sheet{
+    background:var(--bg); width:100%; max-width:640px; border-radius:20px 20px 0 0;
+    padding:10px 20px calc(20px + env(safe-area-inset-bottom)); max-height:80vh; overflow-y:auto; color:var(--text);
+  }
+  .sheet-handle{width:36px; height:5px; background:var(--line); border-radius:3px; margin:6px auto 14px;}
+  .sheet h3{margin:0 0 14px; font-size:19px;}
+  .sheet label{display:block; font-size:12px; font-weight:700; color:var(--text-2); margin:14px 0 5px;}
+  .sheet select, .sheet input[type=text], .sheet input[type=number], .sheet textarea{
+    width:100%; padding:11px 12px; border-radius:10px; border:none; background:var(--bg-2); color:var(--text); font-size:15px; font-family:inherit;
+  }
+  .sheet textarea{resize:vertical; min-height:70px;}
+  .sheet-actions{display:flex; gap:10px; margin-top:20px;}
+  .sheet-actions button{flex:1; padding:12px; border-radius:12px; border:none; font-weight:700; cursor:pointer; font-size:14px;}
+  .btn-primary{background:var(--accent); color:#fff;}
+  .btn-ghost{background:var(--bg-2); color:var(--text);}
+  .btn-danger{background:none; color:var(--danger); text-align:left; padding:12px 4px; font-weight:700;}
+
+  /* ---- celebration ---- */
+  .celebrate-backdrop{
+    position:fixed; inset:0; background:rgba(0,0,0,0.55); z-index:80; display:none;
+    align-items:center; justify-content:center; padding:24px; overflow:hidden;
+  }
+  .celebrate-backdrop.active{display:flex;}
+  .confetti-piece{
+    position:absolute; top:-20px; width:8px; height:14px; opacity:0.9;
+    animation:confettiFall linear forwards; border-radius:2px;
+  }
+  @keyframes confettiFall{
+    0%{ transform:translateY(0) rotate(0deg); opacity:1; }
+    100%{ transform:translateY(115vh) rotate(540deg); opacity:0.9; }
+  }
+  .celebrate-card{
+    position:relative; z-index:2; background:linear-gradient(160deg,#2C2C2E,#0F0F10); border-radius:24px;
+    padding:32px 26px 26px; max-width:340px; width:100%; text-align:center; color:#fff;
+    box-shadow:0 20px 50px rgba(0,0,0,0.4);
+  }
+  .celebrate-cover{
+    width:110px; height:165px; margin:0 auto 18px; border-radius:8px; overflow:hidden;
+    box-shadow:0 10px 24px rgba(0,0,0,0.4); background:linear-gradient(135deg,#333,#222);
+    display:flex; align-items:center; justify-content:center;
+  }
+  .celebrate-cover img{width:100%; height:100%; object-fit:cover;}
+  .celebrate-eyebrow{font-size:12px; font-weight:700; text-transform:uppercase; letter-spacing:0.1em; color:var(--accent-2);}
+  .celebrate-title{font-size:21px; font-weight:800; margin:8px 0 4px; line-height:1.25;}
+  .celebrate-sub{font-size:13px; color:#B0B0B5; margin-bottom:18px;}
+  .celebrate-goal{
+    background:rgba(255,255,255,0.08); border-radius:14px; padding:12px 14px; margin-bottom:20px;
+    display:flex; align-items:center; justify-content:space-between; font-size:13px;
+  }
+  .celebrate-goal .n{font-weight:800; font-size:15px;}
+  .celebrate-done{
+    width:100%; padding:13px; border-radius:12px; border:none; background:var(--accent); color:#fff;
+    font-weight:700; font-size:15px; cursor:pointer;
+  }
+
+  .detail-row{display:flex; align-items:center; gap:12px; padding:10px 0; border-bottom:1px solid var(--line);}
+  .detail-row:last-child{border-bottom:none;}
+  .detail-row .mini-cover{width:36px; height:54px; border-radius:4px; overflow:hidden; flex:0 0 auto; background:var(--bg-2); box-shadow:0 2px 6px rgba(0,0,0,0.12);}
+  .detail-row .mini-cover img{width:100%; height:100%; object-fit:cover;}
+  .detail-row .info{flex:1; min-width:0;}
+  .detail-row .info .t{font-size:14px; font-weight:700; white-space:nowrap; overflow:hidden; text-overflow:ellipsis;}
+  .detail-row .info .s{font-size:11.5px; color:var(--text-2); margin-top:2px;}
+  .detail-row .right{font-size:12.5px; font-weight:700; color:var(--accent); flex:0 0 auto;}
+  .detail-empty{color:var(--text-2); font-size:13.5px; padding:8px 0;}
+
+  .streak-dots{display:flex; justify-content:space-between; margin:16px 0 4px;}
+  .streak-dot{display:flex; flex-direction:column; align-items:center; gap:6px; font-size:10px; color:var(--text-2); font-weight:700;}
+  .streak-dot .circle{width:28px; height:28px; border-radius:50%; background:var(--bg-2);}
+  .streak-dot .circle.hit{background:var(--accent);}
+
+  .big-ring-wrap{position:relative; width:180px; height:180px; margin:6px auto 20px;}
+  .big-ring-wrap svg{transform:rotate(-90deg);}
+  .big-ring-center{position:absolute; inset:0; display:flex; flex-direction:column; align-items:center; justify-content:center;}
+  .big-ring-center .n{font-size:40px; font-weight:800;}
+  .big-ring-center .l{font-size:11px; color:var(--text-2); text-transform:uppercase; letter-spacing:0.06em; font-weight:700;}
+  .time-total{text-align:center; font-size:26px; font-weight:800; margin:6px 0 18px;}
+
+  .debug-banner{
+    position:fixed; left:10px; right:10px; bottom:10px; z-index:999; background:#B00020; color:#fff;
+    border-radius:12px; padding:14px 16px; font-size:12.5px; line-height:1.5; font-family:monospace;
+    max-height:45vh; overflow-y:auto; box-shadow:0 6px 20px rgba(0,0,0,0.4); display:none; white-space:pre-wrap; word-break:break-word;
+  }
+  .debug-banner.show{display:block;}
+  .debug-banner .close-x{float:right; background:rgba(255,255,255,0.2); border:none; color:#fff; border-radius:6px; padding:2px 8px; font-weight:700; cursor:pointer; margin-left:8px;}
+
+  input[type=file]{display:none;}
+  .toast{
+    position:fixed; bottom:90px; left:50%; transform:translateX(-50%); background:var(--text); color:var(--bg);
+    padding:10px 18px; border-radius:999px; font-size:13px; z-index:90; opacity:0; transition:opacity .25s; pointer-events:none;
+  }
+  .toast.show{opacity:1;}
+</style>
+</head>
+<body>
+<div id="app">
+
+  <div class="view active" id="libraryView">
+    <div class="header">
+      <div class="eyebrow">
+        <span id="dateLabel"></span>
+        <div class="header-actions">
+          <button class="icon-round-btn" id="searchToggleBtn">
+            <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2.5"><circle cx="11" cy="11" r="7"/><path d="M21 21l-4.3-4.3"/></svg>
+          </button>
+          <button class="icon-round-btn add-btn" id="addBookBtn">+</button>
+        </div>
+      </div>
+      <h1 id="shelfTitle">Library</h1>
+    </div>
+
+    <div class="search-row" id="searchRow">
+      <input type="text" id="searchInput" placeholder="Search by title or author">
+    </div>
+
+    <div id="continueSection" style="display:none;">
+      <div class="section-title">Continue Reading</div>
+      <div class="carousel" id="continueCarousel"></div>
+    </div>
+
+    <div class="shelf-tabs" id="shelfTabs"></div>
+    <div class="sort-row">
+      <select id="sortSelect">
+        <option value="recent">Recently added</option>
+        <option value="lastread">Recently read</option>
+        <option value="title">Title A-Z</option>
+        <option value="author">Author A-Z</option>
+        <option value="series">By series</option>
+      </select>
+    </div>
+    <div id="libraryContent"></div>
+    <div class="empty-state" id="emptyState" style="display:none;">
+      <h3>Nothing on the shelf yet</h3>
+      <p>Add an EPUB or PDF to start tracking.</p>
+      <button id="emptyAddBtn">Add a book</button>
+    </div>
+  </div>
+
+  <div class="view" id="shelvesView">
+    <div class="header"><h1>Shelves</h1></div>
+    <div id="shelfList"></div>
+    <div class="new-shelf-row">
+      <input type="text" id="newShelfInput" placeholder="New shelf name">
+      <button id="newShelfBtn">Add</button>
+    </div>
+  </div>
+
+  <div class="view" id="statsView">
+    <div class="header"><h1>Reading Goals</h1></div>
+
+    <div class="goal-card" id="goalCardTap">
+      <div class="goal-ring-wrap">
+        <svg width="104" height="104" viewBox="0 0 104 104">
+          <circle cx="52" cy="52" r="45" fill="none" stroke="#3A3A3C" stroke-width="10"/>
+          <circle id="goalRingProgress" cx="52" cy="52" r="45" fill="none" stroke="url(#goalGrad)" stroke-width="10" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
+          <defs>
+            <linearGradient id="goalGrad" x1="0" y1="0" x2="1" y2="1">
+              <stop offset="0%" stop-color="#FF5B39"/>
+              <stop offset="100%" stop-color="#FFB400"/>
+            </linearGradient>
+          </defs>
+        </svg>
+        <div class="goal-ring-center">
+          <div class="n" id="goalDoneNum">0</div>
+          <div class="l" id="goalOfNum">of 0</div>
+        </div>
+      </div>
+      <div class="goal-info">
+        <h3 id="goalYearLabel">2026 Reading Goal</h3>
+        <p id="goalStatusText">Set a goal to see your progress here.</p>
+        <button class="goal-edit-btn" id="editGoalBtn">Edit goal</button>
+      </div>
+    </div>
+
+    <div class="stat-cards">
+      <div class="stat-card" id="statCardStreak"><div class="stat-num" id="statStreak">0</div><div class="stat-label">Day streak</div></div>
+      <div class="stat-card" id="statCardFinished"><div class="stat-num" id="statFinished">0</div><div class="stat-label">Finished this year</div></div>
+      <div class="stat-card" id="statCardReading"><div class="stat-num" id="statReading">0</div><div class="stat-label">Currently reading</div></div>
+      <div class="stat-card" id="statCardHours"><div class="stat-num" id="statHours">0h</div><div class="stat-label">Time reading</div></div>
+    </div>
+
+
+    <div class="compare-card">
+      <div class="compare-title">Books finished by year</div>
+      <div id="compareRows"></div>
+      <div class="compare-note" id="compareNote"></div>
+    </div>
+  </div>
+
+  <div class="view" id="settingsView">
+    <div class="header"><h1>Settings</h1></div>
+
+    <div class="settings-group">
+      <div class="settings-row">
+        <div>
+          <div class="label">Appearance</div>
+          <div class="sub">Light, dark, or match your phone</div>
+        </div>
+        <select id="themeSelect">
+          <option value="system">System</option>
+          <option value="light">Light</option>
+          <option value="dark">Dark</option>
+        </select>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-row">
+        <div>
+          <div class="label">Export library</div>
+          <div class="sub">Save everything to a backup file</div>
+        </div>
+        <button class="settings-btn" id="exportBtn">Export</button>
+      </div>
+      <div class="settings-row">
+        <div>
+          <div class="label">Restore library</div>
+          <div class="sub">Load books &amp; progress from a backup</div>
+        </div>
+        <button class="settings-btn" id="importBtn">Restore</button>
+      </div>
+    </div>
+
+    <div class="settings-group">
+      <div class="settings-row">
+        <div>
+          <div class="label">DeeDee Books</div>
+          <div class="sub">All data stays on this device</div>
+        </div>
+      </div>
+    </div>
+    <input type="file" id="restoreFileInput" accept="application/json">
+  </div>
+
+  <div class="tabbar">
+    <div class="tabbar-inner">
+      <button class="tab-btn active" data-view="libraryView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M4 19V5a1 1 0 0 1 1-1h4v16H5a1 1 0 0 1-1-1Z"/><path d="M9 4h6v16H9z"/><path d="M15 4h4a1 1 0 0 1 1 1v14a1 1 0 0 1-1 1h-4V4Z"/></svg>
+        Library
+      </button>
+      <button class="tab-btn" data-view="shelvesView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><path d="M3 6h18M3 12h18M3 18h18"/></svg>
+        Shelves
+      </button>
+      <button class="tab-btn" data-view="statsView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="9"/><path d="M12 7v5l3 3"/></svg>
+        Goals
+      </button>
+      <button class="tab-btn" data-view="settingsView">
+        <svg viewBox="0 0 24 24" fill="none" stroke="currentColor" stroke-width="2"><circle cx="12" cy="12" r="3"/><path d="M19.4 15a1.65 1.65 0 0 0 .33 1.82l.06.06a2 2 0 1 1-2.83 2.83l-.06-.06a1.65 1.65 0 0 0-1.82-.33 1.65 1.65 0 0 0-1 1.51V21a2 2 0 0 1-4 0v-.09A1.65 1.65 0 0 0 9 19.4a1.65 1.65 0 0 0-1.82.33l-.06.06a2 2 0 1 1-2.83-2.83l.06-.06a1.65 1.65 0 0 0 .33-1.82 1.65 1.65 0 0 0-1.51-1H3a2 2 0 0 1 0-4h.09A1.65 1.65 0 0 0 4.6 9a1.65 1.65 0 0 0-.33-1.82l-.06-.06a2 2 0 1 1 2.83-2.83l.06.06a1.65 1.65 0 0 0 1.82.33H9a1.65 1.65 0 0 0 1-1.51V3a2 2 0 0 1 4 0v.09a1.65 1.65 0 0 0 1 1.51 1.65 1.65 0 0 0 1.82-.33l.06-.06a2 2 0 1 1 2.83 2.83l-.06.06a1.65 1.65 0 0 0-.33 1.82V9a1.65 1.65 0 0 0 1.51 1H21a2 2 0 0 1 0 4h-.09a1.65 1.65 0 0 0-1.51 1z"/></svg>
+        Settings
+      </button>
+    </div>
+  </div>
+
+  <input type="file" id="fileInput" accept=".epub,.pdf" multiple>
+</div>
+
+<div id="readerView">
+  <div class="reader-top">
+    <button class="icon-btn" id="closeReaderBtn">✕</button>
+    <div class="title" id="readerTitle"></div>
+    <div class="actions">
+      <button class="icon-btn" id="addNoteBtn">✎</button>
+      <button class="icon-btn" id="readerInfoBtn">⋯</button>
+    </div>
+  </div>
+  <div id="epubArea"></div>
+  <div id="pdfArea" style="display:none;"></div>
+  <div class="reader-bottom">
+    <div class="reader-nav"><button id="prevBtn">‹</button></div>
+    <input type="range" id="progressSlider" min="0" max="1000" value="0">
+    <div class="reader-pct" id="pctLabel">0%</div>
+    <div class="reader-nav"><button id="nextBtn">›</button></div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="detailSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="detailTitle">Book</h3>
+    <label>Shelf</label>
+    <select id="detailShelfSelect"></select>
+    <label>Series (optional)</label>
+    <input type="text" id="detailSeriesInput" placeholder="e.g. Foundation">
+    <label>Status</label>
+    <select id="detailStatusSelect">
+      <option value="unread">Not started</option>
+      <option value="reading">Reading</option>
+      <option value="finished">Finished</option>
+    </select>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="detailCloseBtn">Close</button>
+      <button class="btn-primary" id="detailOpenBtn">Open</button>
+    </div>
+    <button class="settings-btn" id="detailNotesBtn" style="margin-top:14px;">View notes</button>
+    <button class="btn-danger" id="detailDeleteBtn">Remove from library</button>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="goalSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Set your reading goal</h3>
+    <label>Books to read this year</label>
+    <input type="number" id="goalInput" min="1" max="999" placeholder="e.g. 24">
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="goalCloseBtn">Cancel</button>
+      <button class="btn-primary" id="goalSaveBtn">Save goal</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="noteSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="noteSheetTitle">Add a note</h3>
+    <textarea id="noteInput" placeholder="What's on your mind about this part?"></textarea>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="noteCloseBtn">Cancel</button>
+      <button class="btn-primary" id="noteSaveBtn">Save note</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="notesListSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Notes</h3>
+    <div id="notesListArea"></div>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="notesListCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="celebrate-backdrop" id="celebrateBackdrop">
+  <div class="celebrate-confetti" id="confettiLayer"></div>
+  <div class="celebrate-card">
+    <div class="celebrate-cover" id="celebrateCover"></div>
+    <div class="celebrate-eyebrow">Book finished</div>
+    <div class="celebrate-title" id="celebrateTitle"></div>
+    <div class="celebrate-sub" id="celebrateSub"></div>
+    <div class="celebrate-goal" id="celebrateGoalRow" style="display:none;">
+      <span>Reading Goal</span>
+      <span class="n" id="celebrateGoalText"></span>
+    </div>
+    <button class="celebrate-done" id="celebrateDoneBtn">Done</button>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="streakSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Day Streak</h3>
+    <div class="time-total" id="streakBigNum">0 days</div>
+    <div class="streak-dots" id="streakDots"></div>
+    <p style="font-size:12.5px; color:var(--text-2); text-align:center; margin-top:14px;">Read any part of any book on consecutive days to build your streak.</p>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="streakCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="finishedSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Finished This Year</h3>
+    <div id="finishedListArea"></div>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="finishedCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="readingSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Currently Reading</h3>
+    <div id="readingListArea"></div>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="readingCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="timeSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3>Time Reading</h3>
+    <div class="time-total" id="timeBigNum">0s</div>
+    <div id="timePerBookArea"></div>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="timeCloseBtn">Close</button>
+    </div>
+  </div>
+</div>
+
+<div class="sheet-backdrop" id="goalDetailSheet">
+  <div class="sheet">
+    <div class="sheet-handle"></div>
+    <h3 id="goalDetailYearLabel">Reading Goal</h3>
+    <div class="big-ring-wrap">
+      <svg width="180" height="180" viewBox="0 0 104 104">
+        <circle cx="52" cy="52" r="45" fill="none" stroke="var(--line)" stroke-width="9"/>
+        <circle id="goalDetailRingProgress" cx="52" cy="52" r="45" fill="none" stroke="url(#goalGradDetail)" stroke-width="9" stroke-linecap="round" stroke-dasharray="283" stroke-dashoffset="283"/>
+        <defs>
+          <linearGradient id="goalGradDetail" x1="0" y1="0" x2="1" y2="1">
+            <stop offset="0%" stop-color="#FF5B39"/>
+            <stop offset="100%" stop-color="#FFB400"/>
+          </linearGradient>
+        </defs>
+      </svg>
+      <div class="big-ring-center">
+        <div class="n" id="goalDetailDoneNum">0</div>
+        <div class="l" id="goalDetailOfNum">of 0</div>
+      </div>
+    </div>
+    <p id="goalDetailStatusText" style="text-align:center; font-size:13.5px; color:var(--text-2); margin-top:-8px;"></p>
+    <div class="sheet-actions">
+      <button class="btn-ghost" id="goalDetailCloseBtn">Close</button>
+      <button class="btn-primary" id="goalDetailEditBtn">Edit goal</button>
+    </div>
+  </div>
+</div>
+
+<div class="toast" id="toast"></div>
+<div class="debug-banner" id="debugBanner"><button class="close-x" id="debugCloseBtn">Close</button><div id="debugText"></div></div>
+
+<script>
+const DB_NAME = 'shelfDB', DB_VERSION = 3;
+let db;
+function openDB(){
+  return new Promise((resolve, reject) => {
+    const req = indexedDB.open(DB_NAME, DB_VERSION);
+    req.onupgradeneeded = (e) => {
+      const d = e.target.result;
+      if(!d.objectStoreNames.contains('books')) d.createObjectStore('books', {keyPath:'id'});
+      if(!d.objectStoreNames.contains('shelves')) d.createObjectStore('shelves', {keyPath:'id'});
+      if(!d.objectStoreNames.contains('sessions')) d.createObjectStore('sessions', {keyPath:'id', autoIncrement:true});
+      if(!d.objectStoreNames.contains('settings')) d.createObjectStore('settings', {keyPath:'key'});
+      if(!d.objectStoreNames.contains('notes')) d.createObjectStore('notes', {keyPath:'id', autoIncrement:true});
+    };
+    req.onsuccess = (e) => { db = e.target.result; resolve(db); };
+    req.onerror = (e) => reject(e);
+  });
+}
+function tx(store, mode='readonly'){ return db.transaction(store, mode).objectStore(store); }
+function idbAll(store){ return new Promise((res) => { const out=[]; tx(store).openCursor().onsuccess = e => { const c=e.target.result; if(c){ out.push(c.value); c.continue(); } else res(out); }; }); }
+function idbGet(store, key){ return new Promise((res) => { const r = tx(store).get(key); r.onsuccess = () => res(r.result); }); }
+function idbPut(store, val){ return new Promise((res) => { const r = tx(store,'readwrite').put(val); r.onsuccess = () => res(r.result); }); }
+function idbDelete(store, key){ return new Promise((res) => { const r = tx(store,'readwrite').delete(key); r.onsuccess = () => res(); }); }
+function idbClear(store){ return new Promise((res) => { const r = tx(store,'readwrite').clear(); r.onsuccess = () => res(); }); }
+function uid(){ return Date.now().toString(36) + Math.random().toString(36).slice(2,8); }
+
+let books = [], shelves = [], currentShelfFilter = 'all', searchQuery = '', sortMode = 'recent';
+let activeBook = null, epubRendition = null, epubBook = null, pdfDoc = null, pdfPage = 1, pdfTotalPages = 1;
+let sessionStart = null, sessionBookId = null;
+let readingGoal = null;
+
+const $ = (sel) => document.querySelector(sel);
+const $$ = (sel) => document.querySelectorAll(sel);
+
+function toast(msg){
+  const t = $('#toast'); t.textContent = msg; t.classList.add('show');
+  setTimeout(() => t.classList.remove('show'), 1800);
+}
+
+function showDebugError(msg){
+  const banner = $('#debugBanner');
+  const text = $('#debugText');
+  const line = '[' + new Date().toLocaleTimeString() + '] ' + msg;
+  text.textContent = text.textContent ? (text.textContent + '\n\n' + line) : line;
+  banner.classList.add('show');
+}
+$('#debugCloseBtn').addEventListener('click', () => {
+  $('#debugBanner').classList.remove('show');
+  $('#debugText').textContent = '';
+});
+window.addEventListener('error', (e) => {
+  showDebugError('JS Error: ' + e.message + (e.filename ? (' @ line ' + e.lineno) : ''));
+});
+window.addEventListener('unhandledrejection', (e) => {
+  const reason = e.reason && e.reason.message ? e.reason.message : String(e.reason);
+  showDebugError('Unhandled promise: ' + reason);
+});
+
+function applyTheme(mode){
+  let effective = mode;
+  if(mode === 'system'){
+    effective = window.matchMedia('(prefers-color-scheme: dark)').matches ? 'dark' : 'light';
+  }
+  document.documentElement.setAttribute('data-theme', effective);
+  document.querySelector('meta[name=theme-color]').setAttribute('content', effective === 'dark' ? '#000000' : '#FFFFFF');
+}
+window.matchMedia('(prefers-color-scheme: dark)').addEventListener('change', async () => {
+  const rec = await idbGet('settings','theme');
+  if(!rec || rec.value === 'system') applyTheme('system');
+});
+
+window.addEventListener('DOMContentLoaded', async () => {
+  await window.__libsReady;
+  if(typeof pdfjsLib !== 'undefined'){
+    pdfjsLib.GlobalWorkerOptions.workerSrc = window.__libSources.pdfjs === 'fallback'
+      ? 'https://unpkg.com/pdfjs-dist@3.11.174/build/pdf.worker.min.js'
+      : 'https://cdnjs.cloudflare.com/ajax/libs/pdf.js/3.11.174/pdf.worker.min.js';
+  }
+  await openDB();
+  books = await idbAll('books');
+  shelves = await idbAll('shelves');
+  if(shelves.length === 0){
+    shelves = [{id:'reading-now', name:'Reading now'}, {id:'want-to-read', name:'Want to read'}];
+    for(const s of shelves) await idbPut('shelves', s);
+  }
+  const goalRec = await idbGet('settings', 'yearlyGoal');
+  readingGoal = goalRec ? goalRec.value : null;
+  const themeRec = await idbGet('settings', 'theme');
+  const themeMode = themeRec ? themeRec.value : 'system';
+  $('#themeSelect').value = themeMode;
+  applyTheme(themeMode);
+
+  const now = new Date();
+  $('#dateLabel').textContent = now.toLocaleDateString(undefined,{weekday:'long', month:'long', day:'numeric'});
+
+  renderShelfTabs();
+  renderShelfManageList();
+  renderLibrary();
+  renderStats();
+
+  if('serviceWorker' in navigator){
+    navigator.serviceWorker.register('sw.js').catch(()=>{});
+  }
+});
+
+$('#themeSelect').addEventListener('change', async (e) => {
+  await idbPut('settings', {key:'theme', value:e.target.value});
+  applyTheme(e.target.value);
+});
+
+$$('.tab-btn').forEach(btn => {
+  btn.addEventListener('click', () => {
+    $$('.tab-btn').forEach(b=>b.classList.remove('active'));
+    $$('.view').forEach(v=>v.classList.remove('active'));
+    btn.classList.add('active');
+    $('#'+btn.dataset.view).classList.add('active');
+    if(btn.dataset.view === 'statsView') renderStats();
+  });
+});
+
+$('#searchToggleBtn').addEventListener('click', () => {
+  $('#searchRow').classList.toggle('active');
+  if($('#searchRow').classList.contains('active')) $('#searchInput').focus();
+  else { $('#searchInput').value=''; searchQuery=''; renderLibrary(); }
+});
+$('#searchInput').addEventListener('input', (e) => { searchQuery = e.target.value.trim().toLowerCase(); renderLibrary(); });
+$('#sortSelect').addEventListener('change', (e) => { sortMode = e.target.value; renderLibrary(); });
+
+$('#addBookBtn').addEventListener('click', () => $('#fileInput').click());
+$('#emptyAddBtn').addEventListener('click', () => $('#fileInput').click());
+$('#fileInput').addEventListener('change', async (e) => {
+  const files = Array.from(e.target.files);
+  for(const file of files){ await importFile(file); }
+  e.target.value = '';
+  books = await idbAll('books');
+  renderLibrary();
+});
+
+
+async function importFile(file){
+  const ext = file.name.toLowerCase().endsWith('.pdf') ? 'pdf' : 'epub';
+  const id = uid();
+  toast('Adding ' + file.name + '…');
+  try{
+    if(ext === 'epub'){
+      const arrayBuf = await file.arrayBuffer();
+      const book = ePub(arrayBuf.slice(0));
+      await book.ready;
+      const meta = await book.loaded.metadata;
+      let coverDataUrl = null;
+      try{
+        const coverUrl = await book.coverUrl();
+        if(coverUrl) coverDataUrl = await urlToDataUrl(coverUrl);
+      }catch(err){}
+      const record = {
+        id, title: meta.title || file.name.replace(/\.epub$/i,''), author: meta.creator || '', series:'',
+        format:'epub', fileBlob: file, coverDataUrl, shelf: null, status:'unread',
+        addedAt: Date.now(), finishedAt:null, lastOpenedAt:0
+      };
+      await idbPut('books', record);
+    } else {
+      const arrayBuf = await file.arrayBuffer();
+      const loadingTask = pdfjsLib.getDocument({data: arrayBuf.slice(0)});
+      const pdf = await loadingTask.promise;
+      const page = await pdf.getPage(1);
+      const viewport = page.getViewport({scale: 0.5});
+      const canvas = document.createElement('canvas');
+      canvas.width = viewport.width; canvas.height = viewport.height;
+      await page.render({canvasContext: canvas.getContext('2d'), viewport}).promise;
+      const coverDataUrl = canvas.toDataURL('image/jpeg', 0.8);
+      const record = {
+        id, title: file.name.replace(/\.pdf$/i,''), author:'', series:'',
+        format:'pdf', fileBlob: file, coverDataUrl, shelf:null, status:'unread',
+        addedAt: Date.now(), finishedAt:null, totalPages: pdf.numPages, currentPage:1, lastOpenedAt:0
+      };
+      await idbPut('books', record);
+    }
+    toast('Added to library');
+  }catch(err){
+    console.error(err);
+    toast('Could not read ' + file.name);
+  }
+}
+
+function urlToDataUrl(url){
+  return fetch(url).then(r=>r.blob()).then(blob => new Promise((res)=>{
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result);
+    reader.readAsDataURL(blob);
+  }));
+}
+
+function renderShelfTabs(){
+  const tabs = $('#shelfTabs');
+  const all = [{id:'all', name:'All books'}, ...shelves];
+  tabs.innerHTML = all.map(s => `<button class="shelf-tab ${currentShelfFilter===s.id?'active':''}" data-id="${s.id}">${escapeHtml(s.name)}</button>`).join('');
+  tabs.querySelectorAll('.shelf-tab').forEach(btn => {
+    btn.addEventListener('click', () => {
+      currentShelfFilter = btn.dataset.id;
+      renderShelfTabs();
+      renderLibrary();
+    });
+  });
+}
+
+function matchesSearch(b){
+  if(!searchQuery) return true;
+  return (b.title||'').toLowerCase().includes(searchQuery) || (b.author||'').toLowerCase().includes(searchQuery);
+}
+
+function sortBooks(list){
+  const arr = [...list];
+  if(sortMode==='recent') arr.sort((a,b)=>b.addedAt-a.addedAt);
+  else if(sortMode==='lastread') arr.sort((a,b)=>(b.lastOpenedAt||0)-(a.lastOpenedAt||0));
+  else if(sortMode==='title') arr.sort((a,b)=>a.title.localeCompare(b.title));
+  else if(sortMode==='author') arr.sort((a,b)=>(a.author||'').localeCompare(b.author||''));
+  else if(sortMode==='series') arr.sort((a,b)=>(a.series||'zzz').localeCompare(b.series||'zzz') || a.title.localeCompare(b.title));
+  return arr;
+}
+
+function renderLibrary(){
+  const continuing = books.filter(b => b.status==='reading').sort((a,b)=> (b.lastOpenedAt||0)-(a.lastOpenedAt||0));
+  $('#continueSection').style.display = (continuing.length && !searchQuery) ? 'block' : 'none';
+  $('#continueCarousel').innerHTML = continuing.map(b => {
+    const pct = bookPercent(b);
+    return `
+    <div class="carousel-card" data-id="${b.id}">
+      <div class="cover">${b.coverDataUrl ? `<img src="${b.coverDataUrl}" alt="">` : `<div class="fallback">${escapeHtml(b.title)}</div>`}</div>
+      <div class="carousel-title">${escapeHtml(b.title)}</div>
+      <div class="carousel-sub">${pct}% read</div>
+      <div class="mini-progress"><div style="width:${pct}%"></div></div>
+    </div>`;
+  }).join('');
+  $('#continueCarousel').querySelectorAll('.carousel-card').forEach(c => c.addEventListener('click', () => openReader(c.dataset.id)));
+
+  let filtered = (currentShelfFilter==='all' ? books : books.filter(b=>b.shelf===currentShelfFilter)).filter(matchesSearch);
+  $('#shelfTitle').textContent = currentShelfFilter==='all' ? 'Library' : (shelves.find(s=>s.id===currentShelfFilter)?.name || 'Library');
+  $('#emptyState').style.display = filtered.length ? 'none' : 'block';
+
+  const content = $('#libraryContent');
+  if(!filtered.length){ content.innerHTML=''; return; }
+
+  filtered = sortBooks(filtered);
+
+  if(sortMode === 'series'){
+    const groups = {};
+    filtered.forEach(b => { const key = b.series || '—'; (groups[key] = groups[key]||[]).push(b); });
+    content.innerHTML = Object.keys(groups).map(key => `
+      <div class="series-group">
+        <div class="series-label">${key==='—' ? 'No series' : escapeHtml(key)}</div>
+        <div class="grid">${groups[key].map(bookCardHtml).join('')}</div>
+      </div>`).join('');
+  } else {
+    content.innerHTML = `<div class="grid">${filtered.map(bookCardHtml).join('')}</div>`;
+  }
+  content.querySelectorAll('.book-card').forEach(card => {
+    card.addEventListener('click', () => openDetailSheet(card.dataset.id));
+  });
+}
+
+function bookCardHtml(b){
+  const pct = bookPercent(b);
+  let badge = '';
+  if(b.status==='finished') badge = `<div class="badge">✓</div>`;
+  else if(b.status==='reading') badge = `<div class="badge reading">${pct}</div>`;
+  return `
+  <div class="book-card" data-id="${b.id}">
+    <div class="cover">
+      ${b.coverDataUrl ? `<img src="${b.coverDataUrl}" alt="">` : `<div class="fallback">${escapeHtml(b.title)}</div>`}
+      ${badge}
+    </div>
+    <div class="progress-strip"><div style="width:${pct}%"></div></div>
+    <div class="book-title">${escapeHtml(b.title)}</div>
+    <div class="book-pct">${b.status==='finished' ? 'Finished' : pct+'% read'}</div>
+  </div>`;
+}
+
+function bookPercent(b){
+  if(b.format==='pdf'){
+    if(!b.totalPages) return 0;
+    return Math.round(((b.currentPage||1)/b.totalPages)*100);
+  }
+  return Math.round((b.percent||0)*100);
+}
+
+function escapeHtml(s){ return (s||'').replace(/[&<>"']/g, c => ({'&':'&amp;','<':'&lt;','>':'&gt;','"':'&quot;',"'":'&#39;'}[c])); }
+
+function renderShelfManageList(){
+  const list = $('#shelfList');
+  list.innerHTML = shelves.map(s => `
+    <div class="shelf-row-item">
+      <span style="font-weight:700;">${escapeHtml(s.name)}</span>
+      <button data-id="${s.id}" class="delShelfBtn" style="border:none;background:none;color:var(--danger);font-size:13px;cursor:pointer;font-weight:700;">Remove</button>
+    </div>`).join('') || `<p style="color:var(--text-2); padding:0 20px;">No shelves yet.</p>`;
+  list.querySelectorAll('.delShelfBtn').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      const id = btn.dataset.id;
+      shelves = shelves.filter(s=>s.id!==id);
+      await idbDelete('shelves', id);
+      for(const b of books.filter(b=>b.shelf===id)){ b.shelf=null; await idbPut('books', b); }
+      renderShelfManageList(); renderShelfTabs(); renderLibrary();
+    });
+  });
+}
+$('#newShelfBtn').addEventListener('click', async () => {
+  const input = $('#newShelfInput');
+  const name = input.value.trim();
+  if(!name) return;
+  const s = {id: uid(), name};
+  shelves.push(s);
+  await idbPut('shelves', s);
+  input.value = '';
+  renderShelfManageList(); renderShelfTabs();
+});
+
+let detailBookId = null;
+function openDetailSheet(id){
+  const b = books.find(x=>x.id===id);
+  if(!b) return;
+  detailBookId = id;
+  $('#detailTitle').textContent = b.title;
+  const sel = $('#detailShelfSelect');
+  sel.innerHTML = `<option value="">No shelf</option>` + shelves.map(s=>`<option value="${s.id}" ${b.shelf===s.id?'selected':''}>${escapeHtml(s.name)}</option>`).join('');
+  $('#detailSeriesInput').value = b.series || '';
+  $('#detailStatusSelect').value = b.status || 'unread';
+  $('#detailSheet').classList.add('active');
+}
+$('#detailCloseBtn').addEventListener('click', () => $('#detailSheet').classList.remove('active'));
+$('#detailSheet').addEventListener('click', (e) => { if(e.target===$('#detailSheet')) $('#detailSheet').classList.remove('active'); });
+$('#detailShelfSelect').addEventListener('change', async (e) => {
+  const b = books.find(x=>x.id===detailBookId);
+  b.shelf = e.target.value || null;
+  await idbPut('books', b);
+  renderLibrary();
+});
+$('#detailSeriesInput').addEventListener('change', async (e) => {
+  const b = books.find(x=>x.id===detailBookId);
+  b.series = e.target.value.trim();
+  await idbPut('books', b);
+  renderLibrary();
+});
+$('#detailStatusSelect').addEventListener('change', async (e) => {
+  const b = books.find(x=>x.id===detailBookId);
+  const wasFinished = b.status === 'finished';
+  b.status = e.target.value;
+  if(b.status==='finished'){ b.finishedAt = Date.now(); if(b.format==='pdf') b.currentPage=b.totalPages; else b.percent=1; }
+  await idbPut('books', b);
+  renderLibrary(); renderStats();
+  if(b.status==='finished' && !wasFinished){
+    $('#detailSheet').classList.remove('active');
+    await showCelebration(b);
+  }
+});
+$('#detailOpenBtn').addEventListener('click', () => {
+  $('#detailSheet').classList.remove('active');
+  openReader(detailBookId);
+});
+$('#detailDeleteBtn').addEventListener('click', async () => {
+  await idbDelete('books', detailBookId);
+  books = books.filter(b=>b.id!==detailBookId);
+  const noteRows = (await idbAll('notes')).filter(n=>n.bookId===detailBookId);
+  for(const n of noteRows) await idbDelete('notes', n.id);
+  $('#detailSheet').classList.remove('active');
+  renderLibrary(); renderStats();
+});
+$('#detailNotesBtn').addEventListener('click', () => { openNotesList(detailBookId); });
+
+function nextFrame(){
+  return new Promise(res => requestAnimationFrame(() => requestAnimationFrame(res)));
+}
+
+function debugLog(msg){
+  const el = $('#readerDebug');
+  el.style.display = 'block';
+  el.textContent += msg + '\n';
+  console.log('[reader]', msg);
+}
+
+function debugLog(msg){
+  console.log('[reader]', msg);
+  showDebugError(msg);
+}
+
+async function openReader(id){
+  const b = books.find(x=>x.id===id);
+  if(!b) return;
+  activeBook = b;
+  b.lastOpenedAt = Date.now();
+  if(b.status==='unread'){ b.status='reading'; }
+  await idbPut('books', b);
+  renderLibrary();
+  $('#readerTitle').textContent = b.title;
+  $('#readerView').classList.add('active');
+  sessionStart = Date.now();
+  sessionBookId = b.id;
+
+  debugLog('Opening "' + b.title + '" — format: ' + b.format);
+  debugLog('ePub lib loaded: ' + (typeof ePub !== 'undefined') + ' | pdf.js lib loaded: ' + (typeof pdfjsLib !== 'undefined'));
+  debugLog('File blob: ' + (b.fileBlob ? (b.fileBlob.size + ' bytes') : 'MISSING'));
+
+  try{
+    if(b.format==='epub'){
+      $('#epubArea').style.display='block'; $('#pdfArea').style.display='none';
+      $('#epubArea').innerHTML = '';
+      await nextFrame();
+      const epubAreaEl = $('#epubArea');
+      const epubHeight = epubAreaEl.clientHeight || (window.innerHeight - 140);
+      debugLog('Container height measured: ' + epubHeight + 'px');
+      const arrayBuf = await b.fileBlob.arrayBuffer();
+      debugLog('File read into memory OK (' + arrayBuf.byteLength + ' bytes)');
+      epubBook = ePub(arrayBuf);
+      debugLog('ePub() created book object');
+      epubRendition = epubBook.renderTo('epubArea', {width:'100%', height: epubHeight + 'px', spread:'none'});
+      debugLog('renderTo() called, about to display...');
+      const isDark = document.documentElement.getAttribute('data-theme') === 'dark';
+      if(isDark){
+        epubRendition.themes.default({'body':{'background':'#121212 !important','color':'#F2F2F7 !important'}});
+      }
+      const startCfi = b.location || undefined;
+      await epubRendition.display(startCfi);
+      debugLog('display() succeeded — content should be visible now');
+      epubBook.locations.generate(1000).then(() => {
+        if(b.percent){
+          const cfi = epubBook.locations.cfiFromPercentage(b.percent);
+          if(!startCfi) epubRendition.display(cfi);
+        }
+      });
+      epubRendition.on('relocated', async (loc) => {
+        const pct = epubBook.locations.length() ? epubBook.locations.percentageFromCfi(loc.start.cfi) : 0;
+        b.percent = pct || b.percent || 0;
+        b.location = loc.start.cfi;
+        $('#progressSlider').value = Math.round((b.percent||0)*1000);
+        $('#pctLabel').textContent = Math.round((b.percent||0)*100) + '%';
+        await idbPut('books', b);
+        if(b.percent >= 0.995 && b.status !== 'finished'){
+          b.status = 'finished'; b.finishedAt = Date.now();
+          await idbPut('books', b);
+          books = await idbAll('books');
+          renderLibrary(); renderStats();
+          await showCelebration(b);
+        }
+      });
+      $('#prevBtn').onclick = () => epubRendition.prev();
+      $('#nextBtn').onclick = () => epubRendition.next();
+      $('#progressSlider').oninput = (e) => {
+        const pct = e.target.value/1000;
+        const cfi = epubBook.locations.cfiFromPercentage(pct);
+        epubRendition.display(cfi);
+      };
+      $('#progressSlider').value = Math.round((b.percent||0)*1000);
+      $('#pctLabel').textContent = Math.round((b.percent||0)*100) + '%';
+    } else {
+      $('#epubArea').style.display='none'; $('#pdfArea').style.display='flex';
+      const area = $('#pdfArea');
+      area.innerHTML = '';
+      area.style.flexDirection = 'column';
+      await nextFrame();
+      const arrayBuf = await b.fileBlob.arrayBuffer();
+      debugLog('PDF file read into memory OK (' + arrayBuf.byteLength + ' bytes)');
+      pdfDoc = await pdfjsLib.getDocument({data: arrayBuf}).promise;
+      debugLog('pdf.js parsed document — ' + pdfDoc.numPages + ' pages');
+      pdfTotalPages = pdfDoc.numPages;
+      pdfPage = b.currentPage || 1;
+      await renderPdfPage();
+      $('#progressSlider').max = pdfTotalPages;
+      $('#progressSlider').value = pdfPage;
+      updatePdfPct();
+      $('#prevBtn').onclick = () => changePdfPage(-1);
+      $('#nextBtn').onclick = () => changePdfPage(1);
+      $('#progressSlider').oninput = (e) => { pdfPage = parseInt(e.target.value); renderPdfPage(); updatePdfPct(); saveBook(); };
+    }
+  }catch(err){
+    console.error('Failed to open reader', err);
+    toast('Could not open this book');
+    showDebugError('Reader failed to open "' + (b.title||'') + '": ' + (err && err.message ? err.message : String(err)) + (err && err.stack ? ('\n' + err.stack.split('\n').slice(0,3).join('\n')) : ''));
+  }
+}
+
+async function renderPdfPage(){
+  try{
+    const page = await pdfDoc.getPage(pdfPage);
+    const viewport = page.getViewport({scale: 1.3});
+    const area = $('#pdfArea');
+    area.innerHTML = '';
+    const canvas = document.createElement('canvas');
+    canvas.width = Math.round(viewport.width);
+    canvas.height = Math.round(viewport.height);
+    area.appendChild(canvas);
+    const ctx = canvas.getContext('2d', {alpha:false});
+    ctx.fillStyle = '#FFFFFF';
+    ctx.fillRect(0,0,canvas.width,canvas.height);
+    await page.render({canvasContext: ctx, viewport}).promise;
+    debugLog('Page ' + pdfPage + ' rendered — size ' + canvas.width + 'x' + canvas.height);
+  }catch(err){
+    console.error('PDF page render failed', err);
+    debugLog('Page ' + pdfPage + ' render FAILED: ' + err.message);
+  }
+}
+function updatePdfPct(){
+  const pct = Math.round((pdfPage/pdfTotalPages)*100);
+  $('#pctLabel').textContent = pct + '%';
+  $('#progressSlider').value = pdfPage;
+}
+function changePdfPage(delta){
+  const wasLast = pdfPage === pdfTotalPages;
+  pdfPage = Math.min(pdfTotalPages, Math.max(1, pdfPage+delta));
+  renderPdfPage(); updatePdfPct(); saveBook();
+  if(pdfPage === pdfTotalPages && !wasLast && activeBook && activeBook.status !== 'finished'){
+    (async () => {
+      activeBook.status = 'finished'; activeBook.finishedAt = Date.now();
+      await idbPut('books', activeBook);
+      books = await idbAll('books');
+      renderLibrary(); renderStats();
+      await showCelebration(activeBook);
+    })();
+  }
+}
+
+/* ================= FINISH CELEBRATION ================= */
+const CONFETTI_COLORS = ['#FF5B39','#FFB400','#34C759','#5AC8FA','#FF6A4D'];
+function spawnConfetti(){
+  const layer = $('#confettiLayer');
+  layer.innerHTML = '';
+  const count = 42;
+  for(let i=0;i<count;i++){
+    const piece = document.createElement('div');
+    piece.className = 'confetti-piece';
+    piece.style.left = Math.random()*100 + '%';
+    piece.style.background = CONFETTI_COLORS[i % CONFETTI_COLORS.length];
+    piece.style.animationDuration = (2.2 + Math.random()*1.6) + 's';
+    piece.style.animationDelay = (Math.random()*0.5) + 's';
+    layer.appendChild(piece);
+  }
+}
+function showCelebration(book){
+  return new Promise((resolve) => {
+    $('#celebrateCover').innerHTML = book.coverDataUrl ? `<img src="${book.coverDataUrl}" alt="">` : '';
+    $('#celebrateTitle').textContent = book.title;
+    let sub = '';
+    if(book.addedAt && book.finishedAt){
+      const days = Math.max(1, Math.round((book.finishedAt - book.addedAt) / 86400000));
+      sub = `You finished it${book.author ? ' by ' + book.author : ''} — ${days} day${days===1?'':'s'} in your library.`;
+    } else {
+      sub = book.author ? `by ${book.author}` : 'Nice work finishing this one.';
+    }
+    $('#celebrateSub').textContent = sub;
+
+    const year = new Date().getFullYear();
+    const finishedThisYear = books.filter(b => b.status==='finished' && b.finishedAt && new Date(b.finishedAt).getFullYear()===year).length;
+    if(readingGoal){
+      $('#celebrateGoalRow').style.display = 'flex';
+      $('#celebrateGoalText').textContent = `${finishedThisYear} of ${readingGoal} books`;
+    } else {
+      $('#celebrateGoalRow').style.display = 'none';
+    }
+
+    spawnConfetti();
+    $('#celebrateBackdrop').classList.add('active');
+
+    const doneBtn = $('#celebrateDoneBtn');
+    const onDone = () => {
+      $('#celebrateBackdrop').classList.remove('active');
+      doneBtn.removeEventListener('click', onDone);
+      resolve();
+    };
+    doneBtn.addEventListener('click', onDone);
+  });
+}
+
+async function saveBook(){
+  if(!activeBook) return;
+  if(activeBook.format==='pdf') activeBook.currentPage = pdfPage;
+  await idbPut('books', activeBook);
+}
+
+$('#closeReaderBtn').addEventListener('click', async () => {
+  await saveBook();
+  await endSession();
+  $('#readerView').classList.remove('active');
+  epubRendition = null; epubBook = null; pdfDoc = null;
+  books = await idbAll('books');
+  renderLibrary(); renderStats();
+});
+$('#readerInfoBtn').addEventListener('click', () => { if(activeBook) openDetailSheet(activeBook.id); });
+
+function sessionSeconds(s){ return s.seconds != null ? s.seconds : (s.minutes||0)*60; }
+function formatDuration(totalSeconds){
+  totalSeconds = Math.round(totalSeconds);
+  const h = Math.floor(totalSeconds/3600);
+  const m = Math.floor((totalSeconds%3600)/60);
+  const s = totalSeconds%60;
+  if(h > 0) return `${h}h ${m}m ${s}s`;
+  if(m > 0) return `${m}m ${s}s`;
+  return `${s}s`;
+}
+
+async function endSession(){
+  if(!sessionStart || !sessionBookId) return;
+  const start = sessionStart, bookId = sessionBookId;
+  sessionStart = null; sessionBookId = null;
+  const seconds = Math.max(0, Math.round((Date.now()-start)/1000));
+  if(seconds >= 5){
+    const today = new Date().toISOString().slice(0,10);
+    await idbPut('sessions', {bookId, date: today, seconds});
+  }
+}
+document.addEventListener('visibilitychange', () => {
+  const readerOpen = $('#readerView').classList.contains('active');
+  if(document.hidden){
+    if(sessionStart) endSession();
+  } else if(readerOpen && activeBook){
+    sessionStart = Date.now();
+    sessionBookId = activeBook.id;
+  }
+});
+
+$('#addNoteBtn').addEventListener('click', () => {
+  $('#noteInput').value = '';
+  $('#noteSheetTitle').textContent = 'Add a note';
+  $('#noteSheet').classList.add('active');
+});
+$('#noteCloseBtn').addEventListener('click', () => $('#noteSheet').classList.remove('active'));
+$('#noteSheet').addEventListener('click', (e) => { if(e.target===$('#noteSheet')) $('#noteSheet').classList.remove('active'); });
+$('#noteSaveBtn').addEventListener('click', async () => {
+  const text = $('#noteInput').value.trim();
+  if(!text || !activeBook) { $('#noteSheet').classList.remove('active'); return; }
+  const location = activeBook.format==='pdf' ? ('Page ' + pdfPage) : ('At ' + Math.round((activeBook.percent||0)*100) + '%');
+  await idbPut('notes', {bookId: activeBook.id, text, location, createdAt: Date.now()});
+  $('#noteSheet').classList.remove('active');
+  toast('Note saved');
+});
+
+async function openNotesList(bookId){
+  const all = await idbAll('notes');
+  const notes = all.filter(n=>n.bookId===bookId).sort((a,b)=>b.createdAt-a.createdAt);
+  $('#notesListArea').innerHTML = notes.length ? notes.map(n => `
+    <div class="note-item" data-id="${n.id}">
+      <div class="meta">${n.location} · ${new Date(n.createdAt).toLocaleDateString()}</div>
+      <div class="txt">${escapeHtml(n.text)}</div>
+      <button class="note-del" data-id="${n.id}">Delete</button>
+    </div>`).join('') : `<p style="color:var(--text-2); font-size:13px;">No notes for this book yet — tap the pencil while reading to add one.</p>`;
+  $('#notesListArea').querySelectorAll('.note-del').forEach(btn => {
+    btn.addEventListener('click', async () => {
+      await idbDelete('notes', parseInt(btn.dataset.id));
+      openNotesList(bookId);
+    });
+  });
+  $('#notesListSheet').classList.add('active');
+}
+$('#notesListCloseBtn').addEventListener('click', () => $('#notesListSheet').classList.remove('active'));
+$('#notesListSheet').addEventListener('click', (e) => { if(e.target===$('#notesListSheet')) $('#notesListSheet').classList.remove('active'); });
+
+$('#editGoalBtn').addEventListener('click', (e) => {
+  e.stopPropagation();
+  $('#goalInput').value = readingGoal || '';
+  $('#goalSheet').classList.add('active');
+});
+$('#goalCloseBtn').addEventListener('click', () => $('#goalSheet').classList.remove('active'));
+$('#goalSheet').addEventListener('click', (e) => { if(e.target===$('#goalSheet')) $('#goalSheet').classList.remove('active'); });
+$('#goalSaveBtn').addEventListener('click', async () => {
+  const val = parseInt($('#goalInput').value);
+  if(!val || val < 1){ toast('Enter a number of books'); return; }
+  readingGoal = val;
+  await idbPut('settings', {key:'yearlyGoal', value: val});
+  $('#goalSheet').classList.remove('active');
+  renderStats();
+  toast('Goal saved');
+});
+
+/* ---- goal ring detail sheet ---- */
+$('#goalCardTap').addEventListener('click', () => {
+  const year = new Date().getFullYear();
+  const finishedThisYear = books.filter(b => b.status==='finished' && b.finishedAt && new Date(b.finishedAt).getFullYear()===year).length;
+  $('#goalDetailYearLabel').textContent = year + ' Reading Goal';
+  const circumference = 283;
+  if(readingGoal){
+    const frac = Math.min(1, finishedThisYear/readingGoal);
+    $('#goalDetailRingProgress').setAttribute('stroke-dashoffset', Math.round(circumference*(1-frac)));
+    $('#goalDetailDoneNum').textContent = finishedThisYear;
+    $('#goalDetailOfNum').textContent = 'of ' + readingGoal;
+    $('#goalDetailStatusText').textContent = $('#goalStatusText').textContent;
+  } else {
+    $('#goalDetailRingProgress').setAttribute('stroke-dashoffset', circumference);
+    $('#goalDetailDoneNum').textContent = finishedThisYear;
+    $('#goalDetailOfNum').textContent = 'no goal';
+    $('#goalDetailStatusText').textContent = `You've finished ${finishedThisYear} book${finishedThisYear===1?'':'s'} this year. Set a goal to track progress.`;
+  }
+  $('#goalDetailSheet').classList.add('active');
+});
+$('#goalDetailCloseBtn').addEventListener('click', () => $('#goalDetailSheet').classList.remove('active'));
+$('#goalDetailSheet').addEventListener('click', (e) => { if(e.target===$('#goalDetailSheet')) $('#goalDetailSheet').classList.remove('active'); });
+$('#goalDetailEditBtn').addEventListener('click', () => {
+  $('#goalDetailSheet').classList.remove('active');
+  $('#goalInput').value = readingGoal || '';
+  $('#goalSheet').classList.add('active');
+});
+
+/* ---- streak detail sheet ---- */
+$('#statCardStreak').addEventListener('click', async () => {
+  const sessions = await idbAll('sessions');
+  const days = new Set(sessions.map(s=>s.date));
+  let streak = 0;
+  let cursor = new Date();
+  while(true){
+    const key = cursor.toISOString().slice(0,10);
+    if(days.has(key)){ streak++; cursor.setDate(cursor.getDate()-1); }
+    else break;
+  }
+  $('#streakBigNum').textContent = streak + (streak===1?' day':' days');
+
+  const dotsHtml = [];
+  for(let i=6;i>=0;i--){
+    const d = new Date(); d.setDate(d.getDate()-i);
+    const key = d.toISOString().slice(0,10);
+    const label = d.toLocaleDateString(undefined,{weekday:'short'})[0];
+    dotsHtml.push(`<div class="streak-dot"><div class="circle ${days.has(key)?'hit':''}"></div><span>${label}</span></div>`);
+  }
+  $('#streakDots').innerHTML = dotsHtml.join('');
+  $('#streakSheet').classList.add('active');
+});
+$('#streakCloseBtn').addEventListener('click', () => $('#streakSheet').classList.remove('active'));
+$('#streakSheet').addEventListener('click', (e) => { if(e.target===$('#streakSheet')) $('#streakSheet').classList.remove('active'); });
+
+/* ---- finished-this-year detail sheet ---- */
+$('#statCardFinished').addEventListener('click', () => {
+  const year = new Date().getFullYear();
+  const list = books.filter(b => b.status==='finished' && b.finishedAt && new Date(b.finishedAt).getFullYear()===year)
+    .sort((a,b)=>b.finishedAt-a.finishedAt);
+  $('#finishedListArea').innerHTML = list.length ? list.map(b => `
+    <div class="detail-row" data-id="${b.id}">
+      <div class="mini-cover">${b.coverDataUrl ? `<img src="${b.coverDataUrl}">` : ''}</div>
+      <div class="info"><div class="t">${escapeHtml(b.title)}</div><div class="s">Finished ${new Date(b.finishedAt).toLocaleDateString()}</div></div>
+    </div>`).join('') : `<div class="detail-empty">No books finished yet this year.</div>`;
+  $('#finishedListArea').querySelectorAll('.detail-row').forEach(row => {
+    row.addEventListener('click', () => { $('#finishedSheet').classList.remove('active'); openDetailSheet(row.dataset.id); });
+  });
+  $('#finishedSheet').classList.add('active');
+});
+$('#finishedCloseBtn').addEventListener('click', () => $('#finishedSheet').classList.remove('active'));
+$('#finishedSheet').addEventListener('click', (e) => { if(e.target===$('#finishedSheet')) $('#finishedSheet').classList.remove('active'); });
+
+/* ---- currently-reading detail sheet ---- */
+$('#statCardReading').addEventListener('click', () => {
+  const list = books.filter(b => b.status==='reading').sort((a,b)=>(b.lastOpenedAt||0)-(a.lastOpenedAt||0));
+  $('#readingListArea').innerHTML = list.length ? list.map(b => `
+    <div class="detail-row" data-id="${b.id}">
+      <div class="mini-cover">${b.coverDataUrl ? `<img src="${b.coverDataUrl}">` : ''}</div>
+      <div class="info"><div class="t">${escapeHtml(b.title)}</div><div class="s">${bookPercent(b)}% read</div></div>
+    </div>`).join('') : `<div class="detail-empty">Nothing in progress right now.</div>`;
+  $('#readingListArea').querySelectorAll('.detail-row').forEach(row => {
+    row.addEventListener('click', () => { $('#readingSheet').classList.remove('active'); openReader(row.dataset.id); });
+  });
+  $('#readingSheet').classList.add('active');
+});
+$('#readingCloseBtn').addEventListener('click', () => $('#readingSheet').classList.remove('active'));
+$('#readingSheet').addEventListener('click', (e) => { if(e.target===$('#readingSheet')) $('#readingSheet').classList.remove('active'); });
+
+/* ---- time reading detail sheet ---- */
+$('#statCardHours').addEventListener('click', async () => {
+  const sessions = await idbAll('sessions');
+  const totalSeconds = sessions.reduce((s,x)=>s+sessionSeconds(x),0);
+  $('#timeBigNum').textContent = formatDuration(totalSeconds);
+
+  const byBook = {};
+  sessions.forEach(s => { byBook[s.bookId] = (byBook[s.bookId]||0) + sessionSeconds(s); });
+  const rows = Object.keys(byBook)
+    .map(bookId => ({ book: books.find(b=>b.id===bookId), seconds: byBook[bookId] }))
+    .filter(r => r.book)
+    .sort((a,b)=>b.seconds-a.seconds);
+
+  $('#timePerBookArea').innerHTML = rows.length ? rows.map(r => `
+    <div class="detail-row" data-id="${r.book.id}">
+      <div class="mini-cover">${r.book.coverDataUrl ? `<img src="${r.book.coverDataUrl}">` : ''}</div>
+      <div class="info"><div class="t">${escapeHtml(r.book.title)}</div></div>
+      <div class="right">${formatDuration(r.seconds)}</div>
+    </div>`).join('') : `<div class="detail-empty">No reading time recorded yet.</div>`;
+  $('#timePerBookArea').querySelectorAll('.detail-row').forEach(row => {
+    row.addEventListener('click', () => { $('#timeSheet').classList.remove('active'); openDetailSheet(row.dataset.id); });
+  });
+  $('#timeSheet').classList.add('active');
+});
+$('#timeCloseBtn').addEventListener('click', () => $('#timeSheet').classList.remove('active'));
+$('#timeSheet').addEventListener('click', (e) => { if(e.target===$('#timeSheet')) $('#timeSheet').classList.remove('active'); });
+
+async function renderStats(){
+  const sessions = await idbAll('sessions');
+  const year = new Date().getFullYear();
+  const finishedThisYear = books.filter(b => b.status==='finished' && b.finishedAt && new Date(b.finishedAt).getFullYear()===year).length;
+  const reading = books.filter(b => b.status==='reading').length;
+  const totalSeconds = sessions.reduce((s,x)=>s+sessionSeconds(x),0);
+  $('#statFinished').textContent = finishedThisYear;
+  $('#statReading').textContent = reading;
+  $('#statHours').textContent = Math.floor(totalSeconds/3600)+'h';
+
+  const days = new Set(sessions.map(s=>s.date));
+  let streak = 0;
+  let cursor = new Date();
+  while(true){
+    const key = cursor.toISOString().slice(0,10);
+    if(days.has(key)){ streak++; cursor.setDate(cursor.getDate()-1); }
+    else break;
+  }
+  $('#statStreak').textContent = streak;
+
+  $('#goalYearLabel').textContent = year + ' Reading Goal';
+  const circumference = 283;
+  if(readingGoal){
+    const frac = Math.min(1, finishedThisYear/readingGoal);
+    $('#goalRingProgress').setAttribute('stroke-dashoffset', Math.round(circumference*(1-frac)));
+    $('#goalDoneNum').textContent = finishedThisYear;
+    $('#goalOfNum').textContent = 'of ' + readingGoal;
+    if(finishedThisYear >= readingGoal){
+      $('#goalStatusText').textContent = `Goal complete! You've read ${finishedThisYear} books this year.`;
+    } else {
+      const remaining = readingGoal - finishedThisYear;
+      const now = new Date();
+      const daysLeft = Math.ceil((new Date(year,11,31) - now) / 86400000);
+      const weeksLeft = Math.max(1, Math.round(daysLeft/7));
+      const perWeeks = Math.max(1,Math.round(weeksLeft/remaining));
+      $('#goalStatusText').textContent = `${remaining} more book${remaining===1?'':'s'} to go — about 1 every ${perWeeks} week${perWeeks>=2?'s':''}.`;
+    }
+  } else {
+    $('#goalRingProgress').setAttribute('stroke-dashoffset', circumference);
+    $('#goalDoneNum').textContent = finishedThisYear;
+    $('#goalOfNum').textContent = 'no goal';
+    $('#goalStatusText').textContent = `You've finished ${finishedThisYear} book${finishedThisYear===1?'':'s'} this year. Set a goal to track progress.`;
+  }
+
+  const byYear = {};
+  books.filter(b=>b.status==='finished' && b.finishedAt).forEach(b => {
+    const y = new Date(b.finishedAt).getFullYear();
+    byYear[y] = (byYear[y]||0)+1;
+  });
+  const years = [];
+  for(let y=year; y>=year-3; y--) years.push(y);
+  const maxCount = Math.max(1, ...years.map(y=>byYear[y]||0));
+  $('#compareRows').innerHTML = years.map(y => {
+    const count = byYear[y]||0;
+    const pct = Math.max(6, Math.round((count/maxCount)*100));
+    return `
+    <div class="compare-row">
+      <div class="compare-year">${y}</div>
+      <div class="compare-bar-track"><div class="compare-bar ${y===year?'':'dim'}" style="width:${pct}%"><span>${count>0?count:''}</span></div></div>
+    </div>`;
+  }).join('');
+  const thisYearCount = byYear[year]||0, lastYearCount = byYear[year-1]||0;
+  if(lastYearCount === 0 && thisYearCount === 0){
+    $('#compareNote').textContent = '';
+  } else if(lastYearCount === 0){
+    $('#compareNote').textContent = `First tracked year — keep going!`;
+  } else {
+    const diff = thisYearCount - lastYearCount;
+    const pctDiff = Math.round((diff/lastYearCount)*100);
+    if(diff > 0) $('#compareNote').textContent = `You're reading ${pctDiff}% more than this time last year.`;
+    else if(diff < 0) $('#compareNote').textContent = `${Math.abs(pctDiff)}% behind this time last year — you've got this.`;
+    else $('#compareNote').textContent = `Right on pace with last year.`;
+  }
+}
+
+function blobToDataUrl(blob){
+  return new Promise((res) => {
+    const reader = new FileReader();
+    reader.onload = () => res(reader.result);
+    reader.readAsDataURL(blob);
+  });
+}
+function dataUrlToBlob(dataUrl){
+  return fetch(dataUrl).then(r => r.blob());
+}
+
+$('#exportBtn').addEventListener('click', async () => {
+  toast('Preparing backup…');
+  const allBooks = await idbAll('books');
+  const allShelves = await idbAll('shelves');
+  const allSessions = await idbAll('sessions');
+  const allNotes = await idbAll('notes');
+  const allSettings = await idbAll('settings');
+
+  const booksOut = [];
+  for(const b of allBooks){
+    const fileDataUrl = await blobToDataUrl(b.fileBlob);
+    const {fileBlob, ...rest} = b;
+    booksOut.push({...rest, fileDataUrl});
+  }
+
+  const payload = {
+    app:'DeeDee Books', version:1, exportedAt: Date.now(),
+    books: booksOut, shelves: allShelves, sessions: allSessions, notes: allNotes, settings: allSettings
+  };
+  const blob = new Blob([JSON.stringify(payload)], {type:'application/json'});
+  const url = URL.createObjectURL(blob);
+  const a = document.createElement('a');
+  a.href = url;
+  a.download = `deedee-books-backup-${new Date().toISOString().slice(0,10)}.json`;
+  document.body.appendChild(a); a.click(); document.body.removeChild(a);
+  URL.revokeObjectURL(url);
+  toast('Backup downloaded');
+});
+
+$('#importBtn').addEventListener('click', () => $('#restoreFileInput').click());
+$('#restoreFileInput').addEventListener('change', async (e) => {
+  const file = e.target.files[0];
+  if(!file) return;
+  toast('Restoring…');
+  try{
+    const text = await file.text();
+    const payload = JSON.parse(text);
+    if(!payload.books) throw new Error('Invalid backup file');
+
+    await idbClear('books'); await idbClear('shelves'); await idbClear('sessions');
+    await idbClear('notes'); await idbClear('settings');
+
+    for(const b of payload.books){
+      const {fileDataUrl, ...rest} = b;
+      const fileBlob = await dataUrlToBlob(fileDataUrl);
+      await idbPut('books', {...rest, fileBlob});
+    }
+    for(const s of payload.shelves||[]) await idbPut('shelves', s);
+    for(const s of payload.sessions||[]) await idbPut('sessions', s);
+    for(const n of payload.notes||[]) await idbPut('notes', n);
+    for(const s of payload.settings||[]) await idbPut('settings', s);
+
+    books = await idbAll('books');
+    shelves = await idbAll('shelves');
+    const goalRec = await idbGet('settings', 'yearlyGoal');
+    readingGoal = goalRec ? goalRec.value : null;
+    const themeRec = await idbGet('settings', 'theme');
+    applyTheme(themeRec ? themeRec.value : 'system');
+    if(themeRec) $('#themeSelect').value = themeRec.value;
+
+    renderShelfTabs(); renderShelfManageList(); renderLibrary(); renderStats();
+    toast('Library restored');
+  }catch(err){
+    console.error(err);
+    toast('Could not read that backup file');
+  }
+  e.target.value = '';
+});
+</script>
+</body>
+</html>
